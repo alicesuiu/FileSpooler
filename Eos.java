@@ -1,5 +1,4 @@
 import utils.ProcessWithTimeout;
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,8 +27,11 @@ public class Eos {
         StringBuilder output;
 
         cmd.add("eos");
-    	cmd.add(eosServerPath);
-    	cmd.add("cp -n -s --checksum");
+        cmd.add(eosServerPath);
+        cmd.add("cp");
+        cmd.add("-n");
+        cmd.add("-s");
+        cmd.add("--checksum");
         cmd.add("file:" + element.getFile().getAbsolutePath());
         cmd.add(eosDirPath + "/" + element.getFile().getName());
 
@@ -41,9 +43,5 @@ public class Eos {
         transfer = processTimeout.waitFor(timeWaitSend, TimeUnit.SECONDS);
         output = processTimeout.getStdout();
         return new EosCommand(transfer, output);
-    }
-
-    public static void delete(FileElement element) {
-        new File(element.getFile().getAbsolutePath()).delete();
     }
 }
