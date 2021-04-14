@@ -11,6 +11,7 @@ public class Main {
 
    public static void main(String[] args) {
        String sourceDirPath;
+       String catalogDirPath;
        Boolean md5Option;
        Spooler spooler;
        int maxBackoff;
@@ -22,16 +23,16 @@ public class Main {
        md5Option = Boolean.parseBoolean(System.getProperty("md5.enable"));
        maxBackoff = Integer.parseInt(System.getProperty("max.backoff"));
        Eos.eosServerPath = System.getProperty("eos.server.path");
+       catalogDirPath = System.getProperty("catalog.dir.path");
 
        logger.log(Level.INFO, "EOS Destination Path: " + Eos.eosDirPath);
        logger.log(Level.INFO, "Source Path: " + sourceDirPath);
        logger.log(Level.INFO, "Exponential Backoff Limit: " + maxBackoff);
        logger.log(Level.INFO, "MD5 option: " + md5Option);
        logger.log(Level.INFO, "EOS Server Path: " + Eos.eosServerPath);
+       logger.log(Level.INFO, "Catalog Dir Path: " + catalogDirPath);
 
-       spooler = new Spooler(sourceDirPath, maxBackoff, md5Option);
-       //System.out.println(spooler.getFilesToSend());
-
+       spooler = new Spooler(sourceDirPath, maxBackoff, md5Option, catalogDirPath);
        spooler.run();
    }
 }

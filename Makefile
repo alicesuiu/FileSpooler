@@ -6,6 +6,7 @@ run:
 		 -Dmd5.enable=true \
 		 -Dmax.backoff=10 \
 		 -Deos.server.path=root://eos.grid.pub.ro \
+		 -Dcatalog.dir.path=/root/file_spooler/catalog_dir \
 		 -cp /root/file_spooler/alien-cs.jar:. Main
 clean:
 	rm -rf *.class
