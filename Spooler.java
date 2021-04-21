@@ -1,7 +1,5 @@
 import alien.config.ConfigUtils;
 import alien.io.IOUtils;
-import net.jpountz.xxhash.StreamingXXHash64;
-import net.jpountz.xxhash.XXHashFactory;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,8 +39,10 @@ public class Spooler {
                     FileElement element;
                     try {
                         element = readMetadata(file);
-                        long xxhash = getXXHash64(element.getFile());
-                        element.setXXHash(xxhash);
+                        if (element.getXXHash() == 0) {
+                            long xxhash = IOUtils.getXXHash64(element.getFile());
+                            element.setXXHash(xxhash);
+                        }
                         filesToSend.add(element);
                         logger.log(Level.INFO, "xxHash64 checksum for the file " + element.getFile().getName()
                                 + " is " + String.format("%016x", element.getXXHash()));
@@ -71,8 +71,10 @@ public class Spooler {
             }
 
             for (FileElement element : filesToSend) {
-                xxhash = getXXHash64(element.getFile());
-                element.setXXHash(xxhash);
+                if (element.getXXHash() == 0) {
+                    xxhash = IOUtils.getXXHash64(element.getFile());
+                    element.setXXHash(xxhash);
+                }
                 logger.log(Level.INFO, "xxHash64 checksum for the file " + element.getFile().getName()
                         + " is " + String.format("%016x", element.getXXHash()));
             }
@@ -190,31 +192,4 @@ public class Spooler {
             e.printStackTrace();
         }
     }
-
-    private long getXXHash64(File file) {
-        long checksum = 0;
-        XXHashFactory factory;
-        BufferedInputStream buffStream;
-        InputStream input;
-
-        try {
-            input = new FileInputStream(file);
-            buffStream = new BufferedInputStream(input);
-            factory = XXHashFactory.fastestInstance();
-            StreamingXXHash64 hash64 = factory.newStreamingHash64(0);
-            byte[] buffer = new byte[8192];
-            for (;;) {
-                int read = buffStream.read(buffer);
-                if (read == -1) {
-                    break;
-                }
-                hash64.update(buffer, 0, read);
-            }
-            checksum = hash64.getValue();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return checksum;
-    }
-
 }

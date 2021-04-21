@@ -29,6 +29,7 @@ public class FileElement implements Delayed {
         nrTries = 0;
         time = System.currentTimeMillis();
         file = new File(surl);
+        xxhash = 0;
     }
 
     public File getFile() {
