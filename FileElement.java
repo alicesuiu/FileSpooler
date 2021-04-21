@@ -10,6 +10,7 @@ public class FileElement implements Delayed {
     private String md5;
     private long xxhash;
     private final String surl;
+    private String durl;
     private final long size;
     private final String run;
     private final UUID guid;
@@ -78,6 +79,14 @@ public class FileElement implements Delayed {
 
     public String getMetaaccPeriod() {
         return metaaccPeriod;
+    }
+
+    public String getDurl() {
+        return durl;
+    }
+
+    public void setDurl(String durl) {
+        this.durl = durl;
     }
 
     public void setXXHash(long xxhash) {

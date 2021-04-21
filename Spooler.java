@@ -32,7 +32,7 @@ public class Spooler implements Runnable {
         String fileName = catalogDirPath + "/" + element.getFile().getName().replaceAll(".root", ".done");
         FileWriter writeFile = new FileWriter(fileName);
 
-        writeFile.write("surl" + ":" + element.getSurl() + "\n");
+        writeFile.write("surl" + ":" + element.getDurl() + "\n");
         writeFile.write("size" + ":" + element.getSize() + "\n");
         writeFile.write("ctime" + ":" + element.getCtime() + "\n");
         writeFile.write("run" + ":" + element.getRun() + "\n");

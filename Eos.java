@@ -35,6 +35,7 @@ public class Eos {
         cmd.add("file:" + element.getFile().getAbsolutePath());
         cmd.add(eosDirPath + "/" + element.getFile().getName());
 
+        element.setDurl(eosDirPath + "/" + element.getFile().getName());
         shellProcess = new ProcessBuilder();
         shellProcess.command(cmd);
         process = shellProcess.start();
