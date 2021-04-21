@@ -3,17 +3,13 @@ import alien.io.IOUtils;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.DelayQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class Spooler {
+public class Spooler implements Runnable {
     private BlockingQueue<FileElement> filesToSend;
     private List<FileElement> md5Checksums;
-    private final String sourceDirPath;
     private final String catalogDirPath;
     private final Boolean md5Option;
     private final int maxBackoff;
@@ -23,90 +19,13 @@ public class Spooler {
     private final int badTransfer = 1;
     private final int successfulTransfer = 0;
 
-    public Spooler(String sourceDirPath, int maxBackoff, Boolean md5Option, String catalogDirPath) {
-        this.sourceDirPath = sourceDirPath;
+    public Spooler(BlockingQueue<FileElement> filesToSend, int maxBackoff, Boolean md5Option, String catalogDirPath) {
         this.catalogDirPath = catalogDirPath;
         this.maxBackoff = maxBackoff;
         this.md5Option = md5Option;
         md5Checksums = new ArrayList<>();
         logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
-        filesToSend = addFilesToSend();
-        FileWatcher watcher = new FileWatcher((new File(sourceDirPath))).addListener(new FileAdapter() {
-            @Override
-            public void onCreated(FileEvent event) {
-                File file = event.getFile();
-                if (file.getName().endsWith(".done")) {
-                    FileElement element;
-                    try {
-                        element = readMetadata(file);
-                        if (element.getXXHash() == 0) {
-                            long xxhash = IOUtils.getXXHash64(element.getFile());
-                            element.setXXHash(xxhash);
-                        }
-                        filesToSend.add(element);
-                        logger.log(Level.INFO, "xxHash64 checksum for the file " + element.getFile().getName()
-                                + " is " + String.format("%016x", element.getXXHash()));
-
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        });
-        watcher.watch();
-    }
-
-    private BlockingQueue<FileElement> addFilesToSend() {
-        try {
-            int i;
-            long xxhash;
-            File dir = new File(sourceDirPath);
-            File[] files = dir.listFiles();
-
-            filesToSend = new DelayQueue<>();
-
-            for (i = 0; i < files.length; i++) {
-                if (files[i].getName().endsWith(".done"))
-                    filesToSend.add(readMetadata(files[i]));
-            }
-
-            for (FileElement element : filesToSend) {
-                if (element.getXXHash() == 0) {
-                    xxhash = IOUtils.getXXHash64(element.getFile());
-                    element.setXXHash(xxhash);
-                }
-                logger.log(Level.INFO, "xxHash64 checksum for the file " + element.getFile().getName()
-                        + " is " + String.format("%016x", element.getXXHash()));
-            }
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        } finally {
-            return filesToSend;
-        }
-    }
-
-    private FileElement readMetadata(File file) throws IOException {
-        String surl, run, metaaccPeriod, md5, uuid;
-        long size, ctime;
-        UUID guid;
-        InputStream inputStream = new FileInputStream(file);
-        Properties prop = new Properties();
-
-        prop.load(inputStream);
-        surl = prop.getProperty("surl");
-        run = prop.getProperty("run");
-        metaaccPeriod = prop.getProperty("meta");
-        md5 = prop.getProperty("md5", null);
-        size = Long.parseLong(prop.getProperty("size"));
-        ctime = Long.parseLong(prop.getProperty("ctime"));
-        uuid = prop.getProperty("guid", null);
-        if (uuid == null) {
-            guid = UUID.randomUUID();
-        } else {
-            guid = UUID.fromString(uuid);
-        }
-
-        return new FileElement(md5, surl, size, run, guid, ctime, metaaccPeriod, file.getAbsolutePath());
+        this.filesToSend = filesToSend;
     }
 
     private void writeMetadata(FileElement element) throws IOException {
