@@ -5,8 +5,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class Eos {
-    public static String eosServerPath;
-    public static String eosDirPath;
 
     public Eos() {}
 
@@ -27,15 +25,17 @@ public class Eos {
         StringBuilder output;
 
         cmd.add("eos");
-        cmd.add(eosServerPath);
+        cmd.add(Main.spoolerProperties.gets("eosServer", Main.defaultEosServer));
         cmd.add("cp");
         cmd.add("-n");
         cmd.add("-s");
         cmd.add("--checksum");
         cmd.add("file:" + element.getFile().getAbsolutePath());
-        cmd.add(eosDirPath + "/" + element.getFile().getName());
+        cmd.add(Main.spoolerProperties.gets("destinationDir", Main.defaultDestDir)
+            + "/" + element.getFile().getName());
 
-        element.setDurl(eosDirPath + "/" + element.getFile().getName());
+        element.setDurl(Main.spoolerProperties.gets("destinationDir", Main.defaultDestDir)
+            + "/" + element.getFile().getName());
         shellProcess = new ProcessBuilder();
         shellProcess.command(cmd);
         process = shellProcess.start();

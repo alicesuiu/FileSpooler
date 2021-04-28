@@ -10,26 +10,21 @@ import java.util.logging.Logger;
 public class Spooler implements Runnable {
     private BlockingQueue<FileElement> filesToSend;
     private List<FileElement> md5Checksums;
-    private final String catalogDirPath;
-    private final Boolean md5Option;
-    private final int maxBackoff;
     private final Logger logger;
 
     // Constants
     private final int badTransfer = 1;
     private final int successfulTransfer = 0;
 
-    public Spooler(BlockingQueue<FileElement> filesToSend, int maxBackoff, Boolean md5Option, String catalogDirPath) {
-        this.catalogDirPath = catalogDirPath;
-        this.maxBackoff = maxBackoff;
-        this.md5Option = md5Option;
+    public Spooler(BlockingQueue<FileElement> filesToSend) {
         md5Checksums = new ArrayList<>();
         logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
         this.filesToSend = filesToSend;
     }
 
     private void writeMetadata(FileElement element) throws IOException {
-        String fileName = catalogDirPath + "/" + element.getFile().getName().replaceAll(".root", ".done");
+        String fileName = Main.spoolerProperties.gets("catalogDir", Main.defaultCatalogDir)
+            + "/" + element.getFile().getName().replaceAll(".root", ".done");
         FileWriter writeFile = new FileWriter(fileName);
 
         writeFile.write("surl" + ":" + element.getDurl() + "\n");
@@ -39,6 +34,7 @@ public class Spooler implements Runnable {
         writeFile.write("meta" + ":" + element.getMetaaccPeriod() + "\n");
         writeFile.write("md5" + ":" + element.getMd5() + "\n");
         writeFile.write("guid" + ":" + element.getGuid() + "\n");
+        writeFile.write("xxHash64" + ":" + element.getXXHash() + "\n");
         writeFile.close();
     }
 
@@ -52,7 +48,7 @@ public class Spooler implements Runnable {
             Main.nrFilesSent.getAndIncrement();
             logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
             logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
-            if (md5Option && (element.getMd5() == null)) {
+            if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable) && (element.getMd5() == null)) {
                 md5Checksum = IOUtils.getMD5(element.getFile());
                 element.setMd5(md5Checksum);
                 md5Checksums.add(element);
@@ -66,7 +62,8 @@ public class Spooler implements Runnable {
             logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
             logger.log(Level.INFO, "Total number of files whose transmission failed: " + Main.nrFilesFailed.get());
             element.setNrTries(element.getNrTries() + 1);
-            delayTime = Math.min(Math.max((1 << element.getNrTries()), badTransferDelayTime), maxBackoff);
+            delayTime = Math.min(Math.max((1 << element.getNrTries()), badTransferDelayTime),
+                Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
             logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
             element.setTime(System.currentTimeMillis() + delayTime * 1000);
             logger.log(Level.INFO, "The transmission time of the file is: " + element.getTime());
