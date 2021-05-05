@@ -30,5 +30,5 @@ fi
 for ((i = 0; i < $1; i++)); do
 	filename=file_$i
 	echo $i $filename
-	dd if=/dev/urandom of=$3/$filename bs=$2M count=1
+	dd if=/dev/urandom of=$3/$filename.root bs=$2M count=1
 done
