@@ -18,6 +18,7 @@ public class Main {
     public static AtomicInteger nrFilesOnSend = new AtomicInteger(0);
     public static AtomicInteger nrFilesSent = new AtomicInteger(0);
     public static AtomicInteger nrFilesFailed = new AtomicInteger(0);
+    public static AtomicInteger nrFilesWatched = new AtomicInteger(0);
     public static ExtProperties spoolerProperties;
     private static Logger logger;
     private static BlockingQueue<FileElement> filesToSend;
@@ -62,6 +63,8 @@ public class Main {
                            element.setXXHash(xxhash);
                        }
                        filesToSend.add(element);
+                       logger.log(Level.INFO, Thread.currentThread().getName()
+                               + " processed a number of " + Main.nrFilesWatched.incrementAndGet() + " files");
                        logger.log(Level.INFO, "xxHash64 checksum for the file " + element.getFile().getName()
                                + " is " + String.format("%016x", element.getXXHash()));
                    } catch (IOException e) {

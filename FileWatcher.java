@@ -59,6 +59,7 @@ public class FileWatcher implements Runnable  {
             Thread thread = new Thread(this);
             thread.setDaemon(true);
             thread.start();
+            thread.setName("Watcher Thread");
         }
     }
 }
