@@ -1,3 +1,4 @@
+import alien.monitoring.Timing;
 import utils.ProcessWithTimeout;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -23,26 +24,31 @@ public class Eos {
         ProcessWithTimeout processTimeout;
         List<String> cmd = new ArrayList<>();
         StringBuilder output;
+        String destPath = element.getSurl();
+
+        if (destPath == null)
+            destPath = Main.spoolerProperties.gets("destinationDir", Main.defaultDestDir) +
+                    "/" + element.getFile().getName();
 
         cmd.add("eos");
-        cmd.add(Main.spoolerProperties.gets("eosServer", Main.defaultEosServer));
+        //cmd.add(Main.targetSE.seioDaemons);
+        //cmd.add("root://eos.grid.pub.ro");
         cmd.add("cp");
         cmd.add("-n");
         cmd.add("-s");
         cmd.add("--checksum");
         cmd.add("file:" + element.getFile().getAbsolutePath());
-        cmd.add(Main.spoolerProperties.gets("destinationDir", Main.defaultDestDir)
-            + "/" + element.getFile().getName());
+        cmd.add(destPath);
 
-        element.setDurl(Main.spoolerProperties.gets("destinationDir", Main.defaultDestDir)
-            + "/" + element.getFile().getName());
-        shellProcess = new ProcessBuilder();
-        shellProcess.command(cmd);
-        process = shellProcess.start();
-        processTimeout = new ProcessWithTimeout(process, shellProcess);
-        timeWaitSend = getWaitTimeSend(element);
-        transfer = processTimeout.waitFor(timeWaitSend, TimeUnit.SECONDS);
-        output = processTimeout.getStdout();
+        try (Timing t = new Timing(Main.monitor, "transfer_execution_time")) {
+            shellProcess = new ProcessBuilder();
+            shellProcess.command(cmd);
+            process = shellProcess.start();
+            processTimeout = new ProcessWithTimeout(process, shellProcess);
+            timeWaitSend = getWaitTimeSend(element);
+            transfer = processTimeout.waitFor(timeWaitSend, TimeUnit.SECONDS);
+            output = processTimeout.getStdout();
+        }
         return new EosCommand(transfer, output);
     }
 }

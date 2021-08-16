@@ -1,10 +1,15 @@
 import alien.config.ConfigUtils;
 import alien.io.IOUtils;
+import alien.monitoring.Monitor;
+import alien.monitoring.MonitorFactory;
+import alien.se.SE;
+import alien.se.SEUtils;
 import lazyj.ExtProperties;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Date;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.DelayQueue;
@@ -20,6 +25,7 @@ public class Main {
     public static AtomicInteger nrFilesFailed = new AtomicInteger(0);
     public static AtomicInteger nrFilesWatched = new AtomicInteger(0);
     public static ExtProperties spoolerProperties;
+    public static SE targetSE;
     private static Logger logger;
     private static BlockingQueue<FileElement> filesToSend;
 
@@ -27,22 +33,24 @@ public class Main {
     public static final String defaultSourceDir = System.getProperty("user.dir");
     public static final String defaultDestDir = System.getProperty("user.dir");
     public static final String defaultCatalogDir = System.getProperty("user.dir");
-    public static final String defaultEosServer = "root://eos.grid.pub.ro";
+    public static final String defaultEosServer = "ALICE::CERN::EOSALICEO2";
     public static final boolean defaultMd5Enable = false;
     public static final int defaultMaxBackoff = 10;
     public static final int defaultMaxThreads = 4;
+    public static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
 
    public static void main(String[] args) {
        ExecutorService executor;
 
        logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
        spoolerProperties = ConfigUtils.getConfiguration("spooler");
+       targetSE = SEUtils.getSE(spoolerProperties.gets("eosServer", defaultEosServer));
 
        logger.log(Level.INFO, "EOS Destination Path: " + spoolerProperties.gets("destinationDir", defaultDestDir));
        logger.log(Level.INFO, "Source Path: " + spoolerProperties.gets("sourceDir", defaultSourceDir));
        logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
        logger.log(Level.INFO, "MD5 option: " + spoolerProperties.getb("md5Enable", defaultMd5Enable));
-       logger.log(Level.INFO, "EOS Server Path: " + spoolerProperties.gets("eosServer", defaultEosServer));
+       logger.log(Level.INFO, "EOS Server Path: " + targetSE.getName());
        logger.log(Level.INFO, "Catalog Dir Path: " + spoolerProperties.gets("catalogDir", defaultCatalogDir));
        logger.log(Level.INFO, "Maximum Number of Threads: " + spoolerProperties.geti("maxThreads", defaultMaxThreads));
 
@@ -109,14 +117,18 @@ public class Main {
     }
 
     private static FileElement readMetadata(File file) throws IOException {
-        String surl, run, metaaccPeriod, md5, uuid;
+        String surl, run, metaaccPeriod, md5, uuid, lurl, type, prefix;
         long size, ctime, xxhash;
         UUID guid;
         InputStream inputStream = new FileInputStream(file);
         ExtProperties prop = new ExtProperties(inputStream);
 
-        surl = prop.gets("surl");
+        prefix = "/eos/test/recv_dir";
+
+        surl = prop.gets("surl", null);
+        lurl = prop.gets("lurl");
         run = prop.gets("run");
+        type = prop.gets("type");
         metaaccPeriod = prop.gets("meta");
         md5 = prop.gets("md5", null);
         size = prop.getl("size", 0);
@@ -129,6 +141,17 @@ public class Main {
             guid = UUID.fromString(uuid);
         }
 
-        return new FileElement(md5, surl, size, run, guid, ctime, metaaccPeriod, file.getAbsolutePath(), xxhash);
+        if (surl == null) {
+            surl = prefix + "/";
+            surl += (new Date().getYear() + 1900) + "/";
+            surl += metaaccPeriod.split(":")[1].trim() + "/";
+            surl += run  + "/";
+            surl += type;
+            surl += lurl.substring(lurl.lastIndexOf('/'));
+            System.out.println(surl);
+        }
+
+        return new FileElement(md5, surl, size, run, guid, ctime, metaaccPeriod,
+          file.getAbsolutePath(), xxhash, lurl, type);
     }
 }
