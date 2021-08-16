@@ -27,14 +27,15 @@ public class Spooler implements Runnable {
             + "/" + element.getFile().getName().replaceAll(".root", ".done");
         FileWriter writeFile = new FileWriter(fileName);
 
-        writeFile.write("surl" + ":" + element.getDurl() + "\n");
-        writeFile.write("size" + ":" + element.getSize() + "\n");
-        writeFile.write("ctime" + ":" + element.getCtime() + "\n");
-        writeFile.write("run" + ":" + element.getRun() + "\n");
-        writeFile.write("meta" + ":" + element.getMetaaccPeriod() + "\n");
-        writeFile.write("md5" + ":" + element.getMd5() + "\n");
-        writeFile.write("guid" + ":" + element.getGuid() + "\n");
-        writeFile.write("xxHash64" + ":" + element.getXXHash() + "\n");
+        writeFile.write("surl" + ": " + element.getSurl() + "\n");
+        writeFile.write("size" + ": " + element.getSize() + "\n");
+        writeFile.write("ctime" + ": " + element.getCtime() + "\n");
+        writeFile.write("run" + ": " + element.getRun() + "\n");
+        writeFile.write("meta" + ": " + element.getMetaaccPeriod() + "\n");
+        writeFile.write("md5" + ": " + element.getMd5() + "\n");
+        writeFile.write("guid" + ": " + element.getGuid() + "\n");
+        writeFile.write("xxHash64" + ": " + element.getXXHash() + "\n");
+        writeFile.write("seName" + ": " + Main.targetSE.getName() + "\n");
         writeFile.close();
     }
 
@@ -48,6 +49,7 @@ public class Spooler implements Runnable {
             Main.nrFilesSent.getAndIncrement();
             logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
             logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
+            Main.monitor.incrementCounter("files_successfully_transferred");
             if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable) && (element.getMd5() == null)) {
                 md5Checksum = IOUtils.getMD5(element.getFile());
                 element.setMd5(md5Checksum);
@@ -61,6 +63,7 @@ public class Spooler implements Runnable {
             Main.nrFilesFailed.getAndIncrement();
             logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
             logger.log(Level.INFO, "Total number of files whose transmission failed: " + Main.nrFilesFailed.get());
+            Main.monitor.incrementCounter("files_transmission_failed");
             element.setNrTries(element.getNrTries() + 1);
             delayTime = Math.min(Math.max((1 << element.getNrTries()), badTransferDelayTime),
                 Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
@@ -91,6 +94,7 @@ public class Spooler implements Runnable {
 
                 logger.log(Level.INFO, "Total number of files transmitted in parallel: "
                         + Main.nrFilesOnSend.getAndIncrement());
+                Main.monitor.incrementCounter("files_transferred_parallel");
 
                 command = Eos.transfer(file);
                 xxhash = command.getOutput().toString().split(" ")[3].replace("\n", "");
