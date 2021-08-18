@@ -17,7 +17,7 @@ for filename in os.listdir(directory):
 		#metadata['ctime'] = long(os.stat(abspath).st_ctime)
 		metadata['run'] = ''.join(random.choice(string.digits) for _ in range(9))
 		#metadata['guid'] = uuid.uuid4()
-		metadata['meta:accPeriod'] = 'LHC21r_PHOS'
+		metadata['dataPeriod'] = 'LHC21r_PHOS'
 		#metadata['type'] = "raw"
 
 		output = directory + filename.replace('.root', '.done')

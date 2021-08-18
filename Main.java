@@ -119,7 +119,7 @@ public class Main {
     }
 
     private static FileElement readMetadata(File file) throws IOException {
-        String surl, run, metaaccPeriod, md5, uuid, lurl, curl, type;
+        String surl, run, dataPeriod, md5, uuid, lurl, curl, type;
         long size, ctime, xxhash;
         UUID guid;
         InputStream inputStream = new FileInputStream(file);
@@ -128,7 +128,7 @@ public class Main {
 
         lurl = prop.gets("lurl");
         run = prop.gets("run");
-        metaaccPeriod = prop.gets("meta");
+        dataPeriod = prop.gets("dataPeriod");
 
         type = prop.gets("type", null);
         size = prop.getl("size", 0);
@@ -162,19 +162,19 @@ public class Main {
           guid = UUID.fromString(uuid);
 
         if (surl == null) {
-          surl = generateURL("/eos/test/recv_dir", metaaccPeriod, run,
+          surl = generateURL("/eos/test/recv_dir", dataPeriod, run,
             type, lurl.substring(lurl.lastIndexOf('/')));
           writeFile.write("surl" + ": " + surl + "\n");
         }
 
-        curl = generateURL("/alice/data", metaaccPeriod, run,
+        curl = generateURL("/alice/data", dataPeriod, run,
           type, lurl.substring(lurl.lastIndexOf('/')));
         writeFile.write("curl" + ": " + curl + "\n");
 
         writeFile.write("seName" + ": " + Main.targetSE.getName() + "\n");
         writeFile.close();
 
-        return new FileElement(md5, surl, size, run, guid, ctime, metaaccPeriod,
+        return new FileElement(md5, surl, size, run, guid, ctime, dataPeriod,
           file.getAbsolutePath(), xxhash, lurl, type, curl);
     }
 }
