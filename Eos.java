@@ -24,11 +24,6 @@ public class Eos {
         ProcessWithTimeout processTimeout;
         List<String> cmd = new ArrayList<>();
         StringBuilder output;
-        String destPath = element.getSurl();
-
-        if (destPath == null)
-            destPath = Main.spoolerProperties.gets("destinationDir", Main.defaultDestDir) +
-                    "/" + element.getFile().getName();
 
         cmd.add("eos");
         //cmd.add(Main.targetSE.seioDaemons);
@@ -38,7 +33,7 @@ public class Eos {
         cmd.add("-s");
         cmd.add("--checksum");
         cmd.add("file:" + element.getFile().getAbsolutePath());
-        cmd.add(destPath);
+        cmd.add(element.getSurl());
 
         try (Timing t = new Timing(Main.monitor, "transfer_execution_time")) {
             shellProcess = new ProcessBuilder();
