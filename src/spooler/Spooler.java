@@ -128,7 +128,7 @@ public class Spooler implements Runnable {
     public void run() {
         FileElement file;
         ExitStatus command;
-        String xxhash;
+        String xxhash = null;
 
         try {
             while (true) {
@@ -146,9 +146,13 @@ public class Spooler implements Runnable {
                     monitor.addMeasurement("active_transfers", 1);
 
                     command = Eos.transfer(file);
-                    xxhash = command.getStdOut().split(" ")[3].replace("\n", "");
-                    logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
-                            + file.getFile().getName());
+                    if (command.getStdOut().contains("checksum=xxhash64")) {
+                        xxhash = command.getStdOut().split("checksum=xxhash64")[1].trim();
+                        logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
+                                + file.getFile().getName());
+                    }
+                    else
+                        logger.log(Level.WARNING, "Could not receive the xxhash from the transfer command");
 
                     if (command.getExtProcExitStatus() != 0)
                         checkTransferStatus(badTransfer, file, xxhash);
