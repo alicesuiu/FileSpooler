@@ -12,12 +12,13 @@ for filename in os.listdir(directory):
 	if filename.endswith(".root"):
 		abspath = os.path.abspath(directory + "/" + filename)
 		metadata['lurl'] = abspath
+		metadata['LHCPeriod'] = 'LHC21r_PHOS'
+		metadata['run'] = ''.join(random.choice(string.digits) for _ in range(9))
+
 		#metadata['surl'] = os.path.abspath(dest + filename)
 		#metadata['size'] = os.stat(abspath).st_size
 		#metadata['ctime'] = long(os.stat(abspath).st_ctime)
-		metadata['run'] = ''.join(random.choice(string.digits) for _ in range(9))
 		#metadata['guid'] = uuid.uuid4()
-		metadata['dataPeriod'] = 'LHC21r_PHOS'
 		#metadata['type'] = "raw"
 
 		output = directory + filename.replace('.root', '.done')

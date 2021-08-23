@@ -14,7 +14,7 @@ if ! [[ $1 =~ ^[0-9]+$ ]]; then
 fi
 
 # Check second parameter
-if ! [[ $2 =~ ^[0-9]+(.[0-9]+)?$ ]]; then
+if ! [[ $2 =~ ^[0-9]+(.[0-9]+)?[KMG]?$ ]]; then
 	echo "Second parameter is not a valid number!"
 	echo "[Usage]: ./generate_files.sh p1 <val> p3, val is numerical, gt 0"
 	exit 1
