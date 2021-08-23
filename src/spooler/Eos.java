@@ -37,8 +37,8 @@ public class Eos {
         cmd.add("cp");
         cmd.add("-n");
         cmd.add("-s");
-        cmd.add("-b");
-        cmd.add("33554432");
+        //cmd.add("-b");
+        //cmd.add("33554432");
         cmd.add("--checksum");
         cmd.add("file:" + element.getFile().getAbsolutePath());
         cmd.add(element.getSurl());
