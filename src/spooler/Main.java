@@ -1,7 +1,6 @@
+package spooler;
+
 import alien.config.ConfigUtils;
-import alien.io.IOUtils;
-import alien.monitoring.Monitor;
-import alien.monitoring.MonitorFactory;
 import alien.se.SE;
 import alien.se.SEUtils;
 import alien.catalogue.GUIDUtils;
@@ -23,29 +22,31 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * @author asuiu
+ * @since March 30, 2021
+ */
 public class Main {
-    public static AtomicInteger nrFilesOnSend = new AtomicInteger(0);
-    public static AtomicInteger nrFilesSent = new AtomicInteger(0);
-    public static AtomicInteger nrFilesFailed = new AtomicInteger(0);
-    public static AtomicInteger nrFilesWatched = new AtomicInteger(0);
-    public static ExtProperties spoolerProperties;
-    public static SE targetSE;
-    private static Logger logger;
-    private static BlockingQueue<FileElement> filesToSend;
+    static AtomicInteger nrFilesOnSend = new AtomicInteger(0);
+    static AtomicInteger nrFilesSent = new AtomicInteger(0);
+    static AtomicInteger nrFilesFailed = new AtomicInteger(0);
+    private static AtomicInteger nrFilesWatched = new AtomicInteger(0);
+    static ExtProperties spoolerProperties;
+    static SE targetSE;
+    private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
+    private static BlockingQueue<FileElement> filesToSend = new DelayQueue<>();
 
     // Default Constants
-    public static final String defaultMetadataDir = System.getProperty("user.home") + "/epn2eos";
-    public static final String defaultCatalogDir = System.getProperty("user.home") + "/daqSpool";
-    public static final String defaultEosServer = "ALICE::CERN::EOSALICEO2";
-    public static final boolean defaultMd5Enable = false;
-    public static final int defaultMaxBackoff = 10;
-    public static final int defaultMaxThreads = 4;
-    public static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
+    private static final String defaultMetadataDir = System.getProperty("user.home") + "/epn2eos";
+    static final String defaultCatalogDir = System.getProperty("user.home") + "/daqSpool";
+    private static final String defaultEosServer = "ALICE::CERN::EOSALICEO2";
+    static final boolean defaultMd5Enable = false;
+    static final int defaultMaxBackoff = 10;
+    private static final int defaultMaxThreads = 4;
 
    public static void main(String[] args) {
        ExecutorService executor;
 
-       logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
        spoolerProperties = ConfigUtils.getConfiguration("spooler");
        targetSE = SEUtils.getSE(spoolerProperties.gets("eosServer", defaultEosServer));
 
@@ -57,7 +58,7 @@ public class Main {
        logger.log(Level.INFO, "Maximum Number of Threads: " + spoolerProperties.geti("maxThreads", defaultMaxThreads));
 
        executor = Executors.newFixedThreadPool(spoolerProperties.geti("maxThreads", defaultMaxThreads));
-       filesToSend = addFilesToSend(spoolerProperties.gets("metadataDir", defaultMetadataDir));
+       addFilesToSend(spoolerProperties.gets("metadataDir", defaultMetadataDir));
 
        FileWatcher watcher = new FileWatcher((new File(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
            .addListener(new FileAdapter() {
@@ -83,23 +84,19 @@ public class Main {
            executor.submit(new Spooler(filesToSend));
    }
 
-   private static BlockingQueue<FileElement> addFilesToSend(String sourceDirPath) {
+   private static void addFilesToSend(String sourceDirPath) {
         try {
             int i;
-            long xxhash;
             File dir = new File(sourceDirPath);
             File[] files = dir.listFiles();
 
-            filesToSend = new DelayQueue<>();
-
+            assert files != null;
             for (i = 0; i < files.length; i++) {
                 if (files[i].getName().endsWith(".done"))
                     filesToSend.add(readMetadata(files[i]));
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
-        } finally {
-            return filesToSend;
         }
     }
 
@@ -122,57 +119,59 @@ public class Main {
         String surl, run, dataPeriod, md5, uuid, lurl, curl, type;
         long size, ctime, xxhash;
         UUID guid;
-        InputStream inputStream = new FileInputStream(file);
-        ExtProperties prop = new ExtProperties(inputStream);
-        FileWriter writeFile = new FileWriter(file.getAbsolutePath(), true);
 
-        lurl = prop.gets("lurl");
-        run = prop.gets("run");
-        dataPeriod = prop.gets("dataPeriod");
+        try(InputStream inputStream = new FileInputStream(file); FileWriter writeFile = new FileWriter(file.getAbsolutePath(), true)) {
+            ExtProperties prop = new ExtProperties(inputStream);
 
-        type = prop.gets("type", null);
-        size = prop.getl("size", 0);
-        ctime = prop.getl("ctime", 0);
-        uuid = prop.gets("guid", null);
+            lurl = prop.gets("lurl");
+            run = prop.gets("run");
+            dataPeriod = prop.gets("dataPeriod");
 
-        surl = prop.gets("surl", null);
-        md5 = prop.gets("md5", null);
-        xxhash = prop.getl("xxHash64", 0);
+            type = prop.gets("type", null);
+            size = prop.getl("size", 0);
+            ctime = prop.getl("ctime", 0);
+            uuid = prop.gets("guid", null);
 
-        if (type == null) {
-          type = "raw";
-          writeFile.write("type" + ": " + type + "\n");
+            surl = prop.gets("surl", null);
+            curl = prop.gets("curl", null);
+            md5 = prop.gets("md5", null);
+            xxhash = prop.getl("xxHash64", 0);
+
+            if (type == null) {
+                type = "raw";
+                writeFile.write("type" + ": " + type + "\n");
+            }
+
+            if (size == 0) {
+                size = Files.size(Paths.get(lurl));
+                writeFile.write("size" + ": " + size + "\n");
+            }
+
+            if (ctime == 0) {
+                ctime = file.lastModified();
+                writeFile.write("ctime" + ": " + ctime + "\n");
+            }
+
+            if (uuid == null) {
+                guid = GUIDUtils.generateTimeUUID();
+                writeFile.write("guid" + ": " + guid + "\n");
+            } else
+                guid = UUID.fromString(uuid);
+
+            if (surl == null) {
+                surl = generateURL("/eos/test/recv_dir", dataPeriod, run,
+                        type, lurl.substring(lurl.lastIndexOf('/')));
+                writeFile.write("surl" + ": " + surl + "\n");
+            }
+
+            if (curl == null) {
+                curl = generateURL("/alice/data", dataPeriod, run,
+                        type, lurl.substring(lurl.lastIndexOf('/')));
+                writeFile.write("curl" + ": " + curl + "\n");
+            }
+
+            writeFile.write("seName" + ": " + Main.targetSE.getName() + "\n");
         }
-
-        if (size == 0) {
-          size = Files.size(Paths.get(lurl));
-          writeFile.write("size" + ": " + size + "\n");
-        }
-
-        if (ctime == 0) {
-          ctime = file.lastModified();
-          writeFile.write("ctime" + ": " + ctime + "\n");
-        }
-
-        if (uuid == null) {
-          guid = GUIDUtils.generateTimeUUID();
-          writeFile.write("guid" + ": " + guid + "\n");
-        }
-        else
-          guid = UUID.fromString(uuid);
-
-        if (surl == null) {
-          surl = generateURL("/eos/test/recv_dir", dataPeriod, run,
-            type, lurl.substring(lurl.lastIndexOf('/')));
-          writeFile.write("surl" + ": " + surl + "\n");
-        }
-
-        curl = generateURL("/alice/data", dataPeriod, run,
-          type, lurl.substring(lurl.lastIndexOf('/')));
-        writeFile.write("curl" + ": " + curl + "\n");
-
-        writeFile.write("seName" + ": " + Main.targetSE.getName() + "\n");
-        writeFile.close();
 
         return new FileElement(md5, surl, size, run, guid, ctime, dataPeriod,
           file.getAbsolutePath(), xxhash, lurl, type, curl);

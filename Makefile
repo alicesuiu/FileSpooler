@@ -1,6 +1,6 @@
 build:
-	javac -cp /root/file_spooler/alien-cs.jar *.java
+	javac -cp ./libs/alien-cs.jar -d ./out ./src/spooler/*.java
 run:
-	java -cp /root/file_spooler/alien-cs.jar:. Main
+	java -cp ./libs/alien-cs.jar:./out:. spooler.Main
 clean:
-	rm -rf *.class
+	rm -rf ./out/*

@@ -1,14 +1,16 @@
+package spooler;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileWatcher implements Runnable  {
+class FileWatcher implements Runnable  {
     private List<FileListener> listeners;
     private final File directory;
 
-    public FileWatcher(File directory) {
+    FileWatcher(File directory) {
         this.directory = directory;
         listeners = new ArrayList<>();
     }
@@ -47,13 +49,13 @@ public class FileWatcher implements Runnable  {
         }
     }
 
-    public FileWatcher addListener(FileListener listener) {
+    FileWatcher addListener(FileListener listener) {
         listeners.add(listener);
 
         return this;
     }
 
-    public void watch() {
+    void watch() {
 
         if (directory.exists()) {
             Thread thread = new Thread(this);

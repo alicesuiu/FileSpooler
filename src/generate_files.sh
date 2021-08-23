@@ -2,7 +2,7 @@
 
 # Check number of parameters
 if [[ "$#" -lt 3 ]]; then
-	echo "[Usage]: ./generate_files.sh <number_of_files> <file_size> <path_to_files>"
+	echo "[Usage]: ./generate_files.sh <number_of_files> <file_size [1G]> <path_to_files>"
 	exit 1
 fi
 
@@ -30,5 +30,5 @@ fi
 for ((i = 0; i < $1; i++)); do
 	filename=file_$i
 	echo $i $filename
-	dd if=/dev/urandom of=$3/$filename.root bs=$2M count=1
+	dd if=/dev/urandom of=$3/$filename.root bs=$2 count=1
 done

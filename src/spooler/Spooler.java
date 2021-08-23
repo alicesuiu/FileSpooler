@@ -1,32 +1,39 @@
+package spooler;
+
 import alien.config.ConfigUtils;
 import alien.io.IOUtils;
+import alien.monitoring.Monitor;
+import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
+import lia.util.process.ExternalProcess.ExitStatus;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * @author asuiu
+ * @since March 30, 2021
+ */
 public class Spooler implements Runnable {
     private BlockingQueue<FileElement> filesToSend;
-    private final Logger logger;
+    private final Logger logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
+    private static final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
 
     // Constants
     private final int badTransfer = 1;
     private final int successfulTransfer = 0;
 
-    public Spooler(BlockingQueue<FileElement> filesToSend) {
-        logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
+    Spooler(BlockingQueue<FileElement> filesToSend) {
         this.filesToSend = filesToSend;
     }
 
     private void writeCMetadata(FileElement element) throws IOException {
         String destPath = Main.spoolerProperties.gets("catalogDir", Main.defaultCatalogDir)
-            + "/" + element.getFile().getName().replaceAll(".root", ".done");
+            + element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
         String srcPath = element.getMetaFilePath();
 
         Files.move(Paths.get(srcPath), Paths.get(destPath), StandardCopyOption.REPLACE_EXISTING);
@@ -38,16 +45,16 @@ public class Spooler implements Runnable {
 
 
         if (element.getXXHash() == 0) {
-            try (Timing t = new Timing(Main.monitor, "xxhash_execution_time")) {
-
-                FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true);
+            try (Timing t = new Timing(monitor, "xxhash_execution_time");
+                 FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
 
                 metaXXHash = IOUtils.getXXHash64(element.getFile());
                 element.setXXHash(metaXXHash);
                 writeFile.write("xxHash64" + ": " + element.getXXHash() + "\n");
-                writeFile.close();
 
-                Main.monitor.incrementCounter("nr_xxhash_ops");
+                monitor.addMeasurement("xxhash_file_size", element.getSize());
+
+                monitor.incrementCounter("nr_xxhash_ops");
             }
         }
 
@@ -59,33 +66,32 @@ public class Spooler implements Runnable {
     }
 
     private void computeMD5(FileElement element) throws IOException {
-        FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true);
-        String md5Checksum;
+        try (FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
+            String md5Checksum;
 
-        md5Checksum = IOUtils.getMD5(element.getFile());
-        element.setMd5(md5Checksum);
-        writeFile.write("md5" + ": " + element.getMd5() + "\n");
-        writeFile.close();
+            md5Checksum = IOUtils.getMD5(element.getFile());
+            element.setMd5(md5Checksum);
+            writeFile.write("md5" + ": " + element.getMd5() + "\n");
 
-        logger.log(Level.INFO, "MD5 checksum for the file " + element.getFile().getName()
-                + " is " + element.getMd5());
+            logger.log(Level.INFO, "MD5 checksum for the file " + element.getFile().getName()
+                    + " is " + element.getMd5());
+        }
     }
 
     private void checkTransferStatus(int exitCode, FileElement element, String xxhash) throws IOException {
         long delayTime;
-        int badTransferDelayTime = 10;
-        String md5Checksum;
 
         if (exitCode == successfulTransfer && checkDataIntegrity(element, xxhash)) {
             Main.nrFilesSent.getAndIncrement();
             logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
             logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
-            Main.monitor.incrementCounter("files_successfully_transferred");
+            monitor.incrementCounter("files_successfully_transferred");
 
             if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
                 && (element.getMd5() == null)) {
-                Main.monitor.incrementCounter("nr_md5_ops");
-                try (Timing t = new Timing(Main.monitor, "md5_execution_time")) {
+                monitor.incrementCounter("nr_md5_ops");
+                monitor.addMeasurement("md5_file_size", element.getSize());
+                try (Timing t = new Timing(monitor, "md5_execution_time")) {
                     computeMD5(element);
                 }
             }
@@ -96,10 +102,10 @@ public class Spooler implements Runnable {
             Main.nrFilesFailed.getAndIncrement();
             logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
             logger.log(Level.INFO, "Total number of files whose transmission failed: " + Main.nrFilesFailed.get());
-            Main.monitor.incrementCounter("files_transmission_failed");
+            monitor.incrementCounter("files_transmission_failed");
 
             element.setNrTries(element.getNrTries() + 1);
-            delayTime = Math.min(Math.max((1 << element.getNrTries()), badTransferDelayTime),
+            delayTime = Math.min(1 << element.getNrTries(),
                 Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
 
             logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
@@ -112,13 +118,16 @@ public class Spooler implements Runnable {
         }
     }
 
-    private static void deleteSource(FileElement element) {
-        new File(element.getFile().getAbsolutePath()).delete();
+    private void deleteSource(FileElement element) {
+        if (!new File(element.getFile().getAbsolutePath()).delete()) {
+            logger.log(Level.WARNING, "Could not delete source file " + element.getFile().getAbsolutePath());
+        }
     }
 
+    @Override
     public void run() {
         FileElement file;
-        EosCommand command;
+        ExitStatus command;
         String xxhash;
 
         try {
@@ -131,19 +140,25 @@ public class Spooler implements Runnable {
 
                 logger.log(Level.INFO, "Total number of files transmitted in parallel: "
                         + Main.nrFilesOnSend.getAndIncrement());
-                Main.monitor.incrementCounter("files_transferred_parallel");
+                monitor.incrementCounter("files_transferred");
 
-                command = Eos.transfer(file);
-                xxhash = command.getOutput().toString().split(" ")[3].replace("\n", "");
-                logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
-                        + file.getFile().getName());
+                try {
+                    monitor.addMeasurement("active_transfers", 1);
 
-                if (!command.isStatus())
-                    checkTransferStatus(badTransfer, file, xxhash);
-                else
-                    checkTransferStatus(successfulTransfer, file, xxhash);
+                    command = Eos.transfer(file);
+                    xxhash = command.getStdOut().split(" ")[3].replace("\n", "");
+                    logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
+                            + file.getFile().getName());
 
-                Main.nrFilesOnSend.getAndDecrement();
+                    if (command.getExtProcExitStatus() != 0)
+                        checkTransferStatus(badTransfer, file, xxhash);
+                    else
+                        checkTransferStatus(successfulTransfer, file, xxhash);
+
+                    Main.nrFilesOnSend.getAndDecrement();
+                } finally {
+                    monitor.addMeasurement("active_transfers", -1);
+                }
             }
         } catch (IOException | InterruptedException e) {
             e.printStackTrace();

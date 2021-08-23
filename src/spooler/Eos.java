@@ -1,13 +1,21 @@
+package spooler;
+
+import alien.monitoring.Monitor;
+import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
+import lia.util.process.ExternalProcess.ExitStatus;
 import utils.ProcessWithTimeout;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * @author asuiu
+ * @since March 30, 2021
+ */
 public class Eos {
-
-    public Eos() {}
+    private static final Monitor monitor = MonitorFactory.getMonitor(Eos.class.getCanonicalName());
 
     private static long getWaitTimeSend(FileElement element) {
         long bandwith;
@@ -16,34 +24,38 @@ public class Eos {
         return element.getFile().length() / bandwith;
     }
 
-    public static EosCommand transfer(FileElement element) throws IOException, InterruptedException {
-        boolean transfer;
+    static ExitStatus transfer(FileElement element) throws IOException, InterruptedException {
         long timeWaitSend;
         ProcessBuilder shellProcess;
         Process process;
         ProcessWithTimeout processTimeout;
         List<String> cmd = new ArrayList<>();
-        StringBuilder output;
 
         cmd.add("eos");
-        //cmd.add(Main.targetSE.seioDaemons);
+        //cmd.add(spooler.Main.targetSE.seioDaemons);
         //cmd.add("root://eos.grid.pub.ro");
         cmd.add("cp");
         cmd.add("-n");
         cmd.add("-s");
+        cmd.add("-b");
+        cmd.add("33554432");
         cmd.add("--checksum");
         cmd.add("file:" + element.getFile().getAbsolutePath());
         cmd.add(element.getSurl());
 
-        try (Timing t = new Timing(Main.monitor, "transfer_execution_time")) {
+        // TODO for rate limiting :
+        // -t <integer value, in MB/s>
+        // @see https://gitlab.cern.ch/jalien/jalien/blob/master/src/main/java/alien/io/protocols/Xrootd.java#L904
+
+        try (Timing t = new Timing(monitor, "transfer_execution_time")) {
             shellProcess = new ProcessBuilder();
             shellProcess.command(cmd);
             process = shellProcess.start();
             processTimeout = new ProcessWithTimeout(process, shellProcess);
             timeWaitSend = getWaitTimeSend(element);
-            transfer = processTimeout.waitFor(timeWaitSend, TimeUnit.SECONDS);
-            output = processTimeout.getStdout();
+            processTimeout.waitFor(timeWaitSend, TimeUnit.SECONDS);
+
+            return processTimeout.getExitStatus();
         }
-        return new EosCommand(transfer, output);
     }
 }

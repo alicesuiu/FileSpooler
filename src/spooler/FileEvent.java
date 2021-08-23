@@ -1,12 +1,14 @@
+package spooler;
+
 import java.io.File;
 import java.util.EventObject;
 
-public class FileEvent extends EventObject {
-    public FileEvent(File file) {
+class FileEvent extends EventObject {
+    FileEvent(File file) {
         super(file);
     }
 
-    public File getFile() {
+    File getFile() {
         return (File) getSource();
     }
 }

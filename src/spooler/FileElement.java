@@ -1,8 +1,14 @@
+package spooler;
+
 import java.io.File;
 import java.util.UUID;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * @author asuiu
+ * @since March 30, 2021
+ */
 public class FileElement implements Delayed {
     private final File file;
     private int nrTries;
@@ -15,13 +21,13 @@ public class FileElement implements Delayed {
     private final String run;
     private final UUID guid;
     private final long ctime;
-    private final String dataPeriod;
+    private final String LHCPeriod;
     private final String metaFilePath;
     private final String type;
 
-    public FileElement(String md5, String surl, long size, String run,
-        UUID guid, long ctime, String dataPeriod, String metaFilePath,
-        long xxhash, String lurl, String type, String curl) {
+    FileElement(String md5, String surl, long size, String run,
+                UUID guid, long ctime, String LHCPeriod, String metaFilePath,
+                long xxhash, String lurl, String type, String curl) {
         this.md5 = md5;
         this.surl = surl;
         this.curl = curl;
@@ -29,7 +35,7 @@ public class FileElement implements Delayed {
         this.run = run;
         this.guid = guid;
         this.ctime = ctime;
-        this.dataPeriod = dataPeriod;
+        this.LHCPeriod = LHCPeriod;
         this.metaFilePath = metaFilePath;
         this.xxhash = xxhash;
         this.type = type;
@@ -82,8 +88,8 @@ public class FileElement implements Delayed {
         return ctime;
     }
 
-    public String getDataPeriod() {
-        return dataPeriod;
+    public String getLHCPeriod() {
+        return LHCPeriod;
     }
 
     public String getCurl() {
@@ -108,7 +114,7 @@ public class FileElement implements Delayed {
 
     @Override
     public String toString() {
-        final StringBuilder sb = new StringBuilder("FileElement{");
+        final StringBuilder sb = new StringBuilder("spooler.FileElement{");
         sb.append("fileName='").append(surl).append('\'');
         sb.append(", fileSize=").append(size);
         sb.append(", nrTries=").append(nrTries);
