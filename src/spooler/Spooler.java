@@ -21,7 +21,7 @@ import java.util.logging.Logger;
 public class Spooler implements Runnable {
     private BlockingQueue<FileElement> filesToSend;
     private final Logger logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
-    private static final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
+    private final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
 
     // Constants
     private final int badTransfer = 1;
@@ -42,7 +42,6 @@ public class Spooler implements Runnable {
     private boolean checkDataIntegrity(FileElement element, String xxhash) throws IOException {
         long metaXXHash;
         String fileXXHash;
-
 
         if (element.getXXHash() == 0) {
             try (Timing t = new Timing(monitor, "xxhash_execution_time");
