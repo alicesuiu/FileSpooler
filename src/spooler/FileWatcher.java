@@ -97,7 +97,7 @@ class FileWatcher implements Runnable {
     }
 
     private FileElement readMetadata(File file) throws IOException {
-        String surl, run, LHCPeriod, md5, uuid, lurl, curl, type;
+        String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName;
         long size, ctime, xxhash;
         UUID guid;
 
@@ -117,6 +117,8 @@ class FileWatcher implements Runnable {
             curl = prop.gets("curl", null);
             md5 = prop.gets("md5", null);
             xxhash = prop.getl("xxHash64", 0);
+
+            seName = prop.gets("seName", null);
 
             if (type == null) {
                 type = "raw";
@@ -140,22 +142,25 @@ class FileWatcher implements Runnable {
                 guid = UUID.fromString(uuid);
 
             if (surl == null) {
-                surl = generateURL("/eos/test/recv_dir", LHCPeriod, run,
+                surl = generateURL("/eos/test", LHCPeriod, run,
                         type, lurl.substring(lurl.lastIndexOf('/')));
                 writeFile.write("surl" + ": " + surl + "\n");
             }
 
             if (curl == null) {
-                curl = generateURL("/alice/data", LHCPeriod, run,
+                curl = generateURL("/localhost/localdomain/user/j/jalien", LHCPeriod, run,
                         type, lurl.substring(lurl.lastIndexOf('/')));
                 writeFile.write("curl" + ": " + curl + "\n");
             }
 
-            writeFile.write("seName" + ": " + Main.targetSE.getName() + "\n");
+            if (seName == null) {
+                seName = Main.eosSE.getName();
+                writeFile.write("seName" + ": " + seName + "\n");
+            }
         }
 
         return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
-                file.getAbsolutePath(), xxhash, lurl, type, curl);
+                file.getAbsolutePath(), xxhash, lurl, type, curl, seName);
     }
 
 }

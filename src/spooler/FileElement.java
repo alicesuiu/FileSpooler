@@ -24,10 +24,11 @@ public class FileElement implements Delayed {
     private final String LHCPeriod;
     private final String metaFilePath;
     private final String type;
+    private final String seName;
 
     FileElement(String md5, String surl, long size, String run,
                 UUID guid, long ctime, String LHCPeriod, String metaFilePath,
-                long xxhash, String lurl, String type, String curl) {
+                long xxhash, String lurl, String type, String curl, String seName) {
         this.md5 = md5;
         this.surl = surl;
         this.curl = curl;
@@ -39,6 +40,7 @@ public class FileElement implements Delayed {
         this.metaFilePath = metaFilePath;
         this.xxhash = xxhash;
         this.type = type;
+        this.seName = seName;
         nrTries = 0;
         time = System.currentTimeMillis();
         file = new File(lurl);
@@ -94,6 +96,10 @@ public class FileElement implements Delayed {
 
     public String getCurl() {
         return curl;
+    }
+
+    public String getSeName() {
+        return seName;
     }
 
     public void setXXHash(long xxhash) {

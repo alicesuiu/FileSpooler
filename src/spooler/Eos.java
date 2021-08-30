@@ -3,6 +3,7 @@ package spooler;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
+import alien.se.SEUtils;
 import lia.util.process.ExternalProcess.ExitStatus;
 import utils.ProcessWithTimeout;
 import java.io.IOException;
@@ -32,8 +33,7 @@ public class Eos {
         List<String> cmd = new ArrayList<>();
 
         cmd.add("eos");
-        //cmd.add(spooler.Main.targetSE.seioDaemons);
-        //cmd.add("root://eos.grid.pub.ro");
+        cmd.add(SEUtils.getSE(element.getSeName()).seioDaemons);
         cmd.add("cp");
         cmd.add("-n");
         cmd.add("-s");
