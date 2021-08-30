@@ -16,37 +16,38 @@ import java.util.logging.Logger;
  * @author asuiu
  * @since March 30, 2021
  */
-class FileWatcher implements Runnable {
-    private Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
+public class FileWatcher implements Runnable {
+    private final Logger logger = ConfigUtils.getLogger(FileWatcher.class.getCanonicalName());
     private AtomicInteger nrFilesWatched = new AtomicInteger(0);
     private final File directory;
-    private BlockingQueue<FileElement> filesToSend;
+    private BlockingQueue<FileElement> filesQueue;
 
-    FileWatcher(File directory, BlockingQueue<FileElement> filesToSend) {
+    FileWatcher(File directory, BlockingQueue<FileElement> filesQueue) {
         this.directory = directory;
-        this.filesToSend = filesToSend;
+        this.filesQueue = filesQueue;
     }
 
     @Override
     public void run() {
-        addFilesToSend(Main.spoolerProperties.gets("metadataDir", Main.defaultMetadataDir));
+        addFilesToSend(directory.getAbsolutePath());
 
         try (WatchService watchService = FileSystems.getDefault().newWatchService()) {
-            Path path = Paths.get(Main.spoolerProperties.gets("metadataDir", Main.defaultMetadataDir));
+            Path path = Paths.get(directory.getAbsolutePath());
             path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
 
             WatchKey key;
             while ((key = watchService.take()) != null) {
                 for (WatchEvent<?> event : key.pollEvents()) {
-                    Path filePath = Paths.get(Main.spoolerProperties.gets("metadataDir", Main.defaultMetadataDir) + "/" + event.context());
+                    Path filePath = Paths.get(directory.getAbsolutePath() + "/" + event.context());
                     File file = filePath.toFile();
 
                     if (file.getName().endsWith(".done")) {
                         FileElement element = readMetadata(file);
-                        filesToSend.add(element);
+                        filesQueue.add(element);
                         logger.log(Level.INFO, Thread.currentThread().getName()
                                 + " processed a number of " + nrFilesWatched.incrementAndGet() + " files");
-                        logger.log(Level.INFO, "The file " + element.getFile().getAbsolutePath() + " was queued");
+                        logger.log(Level.INFO, "The file " + element.getFile().getAbsolutePath() + " from "
+                                + directory.getAbsolutePath() + " was queued");
                     }
                 }
                 key.reset();
@@ -61,7 +62,7 @@ class FileWatcher implements Runnable {
             Thread thread = new Thread(this);
             thread.setDaemon(true);
             thread.start();
-            thread.setName("Watcher Thread");
+            thread.setName("Watcher Thread for " + directory.getAbsolutePath() + " directory");
         }
     }
 
@@ -74,7 +75,7 @@ class FileWatcher implements Runnable {
             assert files != null;
             for (i = 0; i < files.length; i++) {
                 if (files[i].getName().endsWith(".done"))
-                    filesToSend.add(readMetadata(files[i]));
+                    filesQueue.add(readMetadata(files[i]));
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
