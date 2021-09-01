@@ -1,15 +1,12 @@
 package spooler;
 
-import alien.catalogue.Register;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
-import alien.se.SE;
-import alien.se.SEUtils;
-import alien.user.AliEnPrincipal;
-import alien.user.UserFactory;
-import java.io.File;
-import java.io.IOException;
+import javax.servlet.http.HttpServletResponse;
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.BlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -19,50 +16,89 @@ import java.util.logging.Logger;
  * @since August 24, 2021
  */
 public class Registrator implements Runnable {
-    private final AliEnPrincipal OWNER = UserFactory.getByUsername("jalien");
-
     private final Logger logger = ConfigUtils.getLogger(Registrator.class.getCanonicalName());
     private final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 
     private BlockingQueue<FileElement> filesToRegister;
+    private final String URL = "http://172.30.0.1:8080/daqreg.jsp";
 
     Registrator(BlockingQueue<FileElement> filesToRegister) {
         this.filesToRegister = filesToRegister;
     }
 
-    private void registerFile(FileElement element) throws IOException {
-        boolean done;
+    private static String encode(final String s){
+        return URLEncoder.encode(s, StandardCharsets.UTF_8);
+    }
 
-        SE targetSE = SEUtils.getSE(element.getSeName());
-        done = Register.register(element.getCurl(),
-                targetSE.seioDaemons + "/" + element.getSurl(),
-                element.getGuid().toString(), element.getMd5(), element.getSize(),
-                element.getSeName(), OWNER);
+    private String getURLParam(FileElement element) {
+        String urlParam = "";
 
-        if (!done) {
-            Main.nrFilesRegFailed.getAndIncrement();
-            logger.log(Level.WARNING, "Registering failed for:\nFile : " + element.getCurl()
-                    + "\nPFN: " + targetSE.seioDaemons + "/" + element.getSurl()
-                    + "\nGUID: " + element.getGuid()
-                    + "\nMD5: " + element.getMd5()
-                    + "\nSize: " + element.getSize()
-                    + "\nSE: " + element.getSeName());
-            logger.log(Level.INFO, "Total number of files whose registration failed: " + Main.nrFilesRegFailed.get());
-            monitor.incrementCounter("files_registration_failed");
-        } else {
-            Main.nrFilesRegistered.getAndIncrement();
-            logger.log(Level.INFO, "File successfuly registered : " + element.getCurl()
-                    + ", " + targetSE.seioDaemons + "/" + element.getSurl()
-                    + ", " + element.getGuid()
-                    + ", " + element.getMd5()
-                    + ", " + element.getSize()
-                    + ", " + element.getSeName());
-            logger.log(Level.INFO, "Total number of files successfully registered: " + Main.nrFilesRegistered.get());
-            monitor.incrementCounter("files_successfully_registered");
+        urlParam += encode("curl") + "=" + encode(element.getCurl()) + "&";
+        urlParam += encode("surl") + "=" + encode(element.getSurl()) + "&";
+        urlParam += encode("seName") + "=" + encode(element.getSeName()) + "&";
+        urlParam += encode("guid") + "=" + encode(element.getGuid().toString()) + "&";
+        urlParam += encode("size") + "=" + encode(String.valueOf(element.getSize())) + "&";
 
-            /* if (!new File(element.getMetaFilePath()).delete()) {
-                logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
-            } */
+        if (element.getMd5() == null)
+            urlParam += encode("md5") + "=" + encode("missing");
+        else
+            urlParam += encode("md5") + "=" + encode(element.getMd5());
+
+        return urlParam;
+    }
+
+    private void registerFile(FileElement element) {
+        int status;
+        String inputLine;
+        StringBuffer content = new StringBuffer();
+        String urlParam = getURLParam(element);
+
+        if (urlParam.length() > 0) {
+            try {
+                URL url = new URL(URL);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setDoOutput(true);
+                connection.setConnectTimeout(1000 * 60);
+
+                try (OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream())) {
+                    writer.write(urlParam);
+                    writer.flush();
+                }
+
+                status = connection.getResponseCode();
+
+                if (status == HttpServletResponse.SC_OK || status == HttpServletResponse.SC_CREATED) {
+                    Main.nrFilesRegistered.getAndIncrement();
+                    logger.log(Level.INFO, "Successfuly registered: " + element.getCurl());
+                    logger.log(Level.INFO, "Total number of files successfully registered: "
+                            + Main.nrFilesRegistered.get());
+                    monitor.incrementCounter("files_successfully_registered");
+
+                    /*if (!new File(element.getMetaFilePath()).delete()) {
+                    logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
+                    */
+                } else {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(connection.getErrorStream()))) {
+
+                        content.setLength(0);
+                        while ((inputLine = reader.readLine()) != null) {
+                            content.append(inputLine);
+                        }
+                    }
+
+                    Main.nrFilesRegFailed.getAndIncrement();
+                    logger.log(Level.INFO, String.valueOf(content));
+                    logger.log(Level.INFO, "Total number of files whose registration failed: "
+                            + Main.nrFilesRegFailed.get());
+                    monitor.incrementCounter("files_registration_failed");
+                }
+
+                connection.disconnect();
+            } catch (IOException e) {
+                logger.log(Level.WARNING, "Communication error", e);
+            }
         }
     }
 
@@ -75,12 +111,14 @@ public class Registrator implements Runnable {
                 logger.log(Level.INFO, "Total number of files to be registered: " + filesToRegister.size());
 
                 file = filesToRegister.take();
+                if (file == null)
+                    continue;
 
                 monitor.incrementCounter("files_registered");
 
                 registerFile(file);
             }
-        } catch (InterruptedException | IOException e) {
+        } catch (InterruptedException e) {
             e.printStackTrace();
         }
     }
