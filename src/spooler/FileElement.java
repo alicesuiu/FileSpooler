@@ -120,13 +120,23 @@ public class FileElement implements Delayed {
 
     @Override
     public String toString() {
-        final StringBuilder sb = new StringBuilder("spooler.FileElement{");
-        sb.append("fileName='").append(surl).append('\'');
-        sb.append(", fileSize=").append(size);
-        sb.append(", nrTries=").append(nrTries);
-        sb.append(", time=").append(time);
-        sb.append('}');
-        return sb.toString();
+        String sb = "FileElement{" + "file=" + file +
+                ", nrTries=" + nrTries +
+                ", time=" + time +
+                ", md5='" + md5 + '\'' +
+                ", xxhash=" + xxhash +
+                ", surl='" + surl + '\'' +
+                ", curl='" + curl + '\'' +
+                ", size=" + size +
+                ", run='" + run + '\'' +
+                ", guid=" + guid +
+                ", ctime=" + ctime +
+                ", LHCPeriod='" + LHCPeriod + '\'' +
+                ", metaFilePath='" + metaFilePath + '\'' +
+                ", type='" + type + '\'' +
+                ", seName='" + seName + '\'' +
+                '}';
+        return sb;
     }
 
     @Override

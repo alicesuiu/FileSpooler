@@ -39,15 +39,21 @@ public class Main {
 
    public static void main(String[] args) {
        spoolerProperties = ConfigUtils.getConfiguration("spooler");
-       eosSE = SEUtils.getSE(spoolerProperties.gets("eosServer", defaultEosServer));
 
        logger.log(Level.INFO, "Metadata Dir Path: " + spoolerProperties.gets("metadataDir", defaultMetadataDir));
        logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
        logger.log(Level.INFO, "MD5 option: " + spoolerProperties.getb("md5Enable", defaultMd5Enable));
-       logger.log(Level.INFO, "EOS Server Path: " + eosSE.getName());
        logger.log(Level.INFO, "Catalog Dir Path: " + spoolerProperties.gets("catalogDir", defaultCatalogDir));
        logger.log(Level.INFO, "Maximum Number of Transfer Threads: " + spoolerProperties.geti("maxTransferThreads", defaultMaxTransferThreads));
        logger.log(Level.INFO, "Maximum Number of Registration Threads: " + spoolerProperties.geti("maxRegistrationThreads", defaultMaxRegistrationThreads));
+
+       eosSE = SEUtils.getSE(spoolerProperties.gets("eosServer", defaultEosServer));
+       if (eosSE == null) {
+           logger.log(Level.WARNING, "SE not found");
+           return;
+       }
+
+       logger.log(Level.INFO, "EOS Server Path: " + eosSE.getName());
 
        FileWatcher transferWatcher = new FileWatcher(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir)), filesToSend);
        transferWatcher.watch();

@@ -26,7 +26,7 @@ public class Registrator implements Runnable {
         this.filesToRegister = filesToRegister;
     }
 
-    private static String encode(final String s){
+    private String encode(final String s){
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }
 

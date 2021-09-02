@@ -121,7 +121,7 @@ public class FileWatcher implements Runnable {
 
             seName = prop.gets("seName", null);
 
-            if (type == null) {
+            if (type == null || type.length() <= 0) {
                 type = "raw";
                 writeFile.write("type" + ": " + type + "\n");
             }
@@ -136,25 +136,25 @@ public class FileWatcher implements Runnable {
                 writeFile.write("ctime" + ": " + ctime + "\n");
             }
 
-            if (uuid == null) {
+            if (uuid == null || uuid.length() <= 0) {
                 guid = GUIDUtils.generateTimeUUID();
                 writeFile.write("guid" + ": " + guid + "\n");
             } else
                 guid = UUID.fromString(uuid);
 
-            if (surl == null) {
+            if (surl == null || surl.length() <= 0) {
                 surl = generateURL("/eos/test", LHCPeriod, run,
                         type, lurl.substring(lurl.lastIndexOf('/')));
                 writeFile.write("surl" + ": " + surl + "\n");
             }
 
-            if (curl == null) {
+            if (curl == null || curl.length() <= 0) {
                 curl = generateURL("/localhost/localdomain/user/j/jalien", LHCPeriod, run,
                         type, lurl.substring(lurl.lastIndexOf('/')));
                 writeFile.write("curl" + ": " + curl + "\n");
             }
 
-            if (seName == null) {
+            if (seName == null || seName.length() <= 0) {
                 seName = Main.eosSE.getName();
                 writeFile.write("seName" + ": " + seName + "\n");
             }
