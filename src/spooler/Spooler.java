@@ -1,181 +1,173 @@
 package spooler;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import alien.config.ConfigUtils;
 import alien.io.IOUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
 import lia.util.process.ExternalProcess.ExitStatus;
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.concurrent.BlockingQueue;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * @author asuiu
  * @since March 30, 2021
  */
 public class Spooler implements Runnable {
-    private BlockingQueue<FileElement> filesToSend;
-    private final Logger logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
-    private final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
+	private final Logger logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
+	private final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
 
-    // Constants
-    private final int badTransfer = 1;
-    private final int successfulTransfer = 0;
+	// Constants
+	private final int badTransfer = 1;
+	private final int successfulTransfer = 0;
 
-    Spooler(BlockingQueue<FileElement> filesToSend) {
-        this.filesToSend = filesToSend;
-    }
+	private final FileElement toTransfer;
 
-    private void writeCMetadata(FileElement element) throws IOException {
-        String destPath = Main.spoolerProperties.gets("catalogDir", Main.defaultCatalogDir)
-            + element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
-        String srcPath = element.getMetaFilePath();
+	Spooler(FileElement element) {
+		this.toTransfer = element;
+	}
 
-        Files.move(Paths.get(srcPath), Paths.get(destPath), StandardCopyOption.REPLACE_EXISTING);
-    }
+	private static void writeCMetadata(FileElement element) throws IOException {
+		String destPath = Main.spoolerProperties.gets("catalogDir", Main.defaultCatalogDir)
+				+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
+		String srcPath = element.getMetaFilePath();
 
-    private boolean checkDataIntegrity(FileElement element, String xxhash) throws IOException {
-        long metaXXHash;
-        String fileXXHash;
+		Files.move(Paths.get(srcPath), Paths.get(destPath), StandardCopyOption.REPLACE_EXISTING);
+	}
 
-        if (element.getXXHash() == 0) {
-            try (Timing t = new Timing(monitor, "xxhash_execution_time");
-                 FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
+	private boolean checkDataIntegrity(FileElement element, String xxhash) throws IOException {
+		long metaXXHash;
+		String fileXXHash;
 
-                metaXXHash = IOUtils.getXXHash64(element.getFile());
-                element.setXXHash(metaXXHash);
-                writeFile.write("xxHash64" + ": " + element.getXXHash() + "\n");
+		if (element.getXXHash() == 0) {
+			try (Timing t = new Timing(monitor, "xxhash_execution_time");
+					FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
 
-                monitor.addMeasurement("xxhash_file_size", element.getSize());
-                monitor.incrementCounter("nr_xxhash_ops");
-            }
-        }
+				metaXXHash = IOUtils.getXXHash64(element.getFile());
+				element.setXXHash(metaXXHash);
+				writeFile.write("xxHash64" + ": " + element.getXXHash() + "\n");
 
-        fileXXHash = String.format("%016x", element.getXXHash());
-        logger.log(Level.INFO, "xxHash64 checksum for the file "
-                + element.getFile().getName() + " is " + fileXXHash);
+				monitor.addMeasurement("xxhash_file_size", element.getSize());
+				monitor.incrementCounter("nr_xxhash_ops");
+			}
+		}
 
-        return fileXXHash.equals(xxhash);
-    }
+		fileXXHash = String.format("%016x", Long.valueOf(element.getXXHash()));
+		logger.log(Level.INFO, "xxHash64 checksum for the file "
+				+ element.getFile().getName() + " is " + fileXXHash);
 
-    private void computeMD5(FileElement element) throws IOException {
-        try (FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
-            String md5Checksum;
+		return fileXXHash.equals(xxhash);
+	}
 
-            md5Checksum = IOUtils.getMD5(element.getFile());
-            element.setMd5(md5Checksum);
-            writeFile.write("md5" + ": " + element.getMd5() + "\n");
+	private void computeMD5(FileElement element) throws IOException {
+		try (FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
+			String md5Checksum;
 
-            logger.log(Level.INFO, "MD5 checksum for the file " + element.getFile().getName()
-                    + " is " + element.getMd5());
-        }
-    }
+			md5Checksum = IOUtils.getMD5(element.getFile());
+			element.setMd5(md5Checksum);
+			writeFile.write("md5" + ": " + element.getMd5() + "\n");
 
-    private void checkTransferStatus(int exitCode, FileElement element, String xxhash)
-            throws IOException, InterruptedException {
-        long delayTime;
+			logger.log(Level.INFO, "MD5 checksum for the file " + element.getFile().getName()
+					+ " is " + element.getMd5());
+		}
+	}
 
-        if (exitCode == successfulTransfer && checkDataIntegrity(element, xxhash)) {
-            Main.nrFilesSent.getAndIncrement();
-            logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
-            logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
-            monitor.incrementCacheHits("transferred_files");
-            monitor.addMeasurement("nr_transmitted_bytes", element.getSize());
+	private void checkTransferStatus(int exitCode, FileElement element, String xxhash)
+			throws IOException, InterruptedException {
+		long delayTime;
 
-            if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
-                && (element.getMd5() == null)) {
-                monitor.incrementCounter("nr_md5_ops");
-                monitor.addMeasurement("md5_file_size", element.getSize());
-                try (Timing t = new Timing(monitor, "md5_execution_time")) {
-                    computeMD5(element);
-                }
-            }
+		if (exitCode == successfulTransfer && checkDataIntegrity(element, xxhash)) {
+			Main.nrFilesSent.getAndIncrement();
+			logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
+			logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
+			monitor.incrementCacheHits("transferred_files");
+			monitor.addMeasurement("nr_transmitted_bytes", element.getSize());
 
-            Eos.transfer(element.getMetaFilePath(), element.getSurl().concat(".meta"),
-                    element.getSeioDaemons(), new File(element.getMetaFilePath()).length(), 0);
-            logger.log(Level.INFO, "The " + element.getMetaFilePath() + " file is successfully sent!");
+			if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
+					&& (element.getMd5() == null)) {
+				monitor.incrementCounter("nr_md5_ops");
+				monitor.addMeasurement("md5_file_size", element.getSize());
+				try (Timing t = new Timing(monitor, "md5_execution_time")) {
+					computeMD5(element);
+				}
+			}
 
-            writeCMetadata(element);
-            deleteSource(element);
-        } else {
-            Main.nrFilesFailed.getAndIncrement();
-            logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
-            logger.log(Level.INFO, "Total number of files whose transmission failed: " + Main.nrFilesFailed.get());
-            monitor.incrementCacheMisses("transferred_files");
+			Eos.transfer(element.getMetaFilePath(), element.getSurl().concat(".meta"),
+					element.getSeioDaemons(), new File(element.getMetaFilePath()).length(), 0);
 
-            element.setNrTries(element.getNrTries() + 1);
-            delayTime = Math.min(1 << element.getNrTries(),
-                Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
+			// TODO log actual transfer status for .meta too
+			logger.log(Level.INFO, "The " + element.getMetaFilePath() + " file is successfully sent!");
 
-            logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
+			writeCMetadata(element);
+			deleteSource(element);
+		}
+		else {
+			Main.nrFilesFailed.getAndIncrement();
+			logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
+			logger.log(Level.INFO, "Total number of files whose transmission failed: " + Main.nrFilesFailed.get());
+			monitor.incrementCacheMisses("transferred_files");
 
-            element.setTime(System.currentTimeMillis() + delayTime * 1000);
+			element.setNrTries(element.getNrTries() + 1);
+			delayTime = Math.min(1 << element.getNrTries(),
+					Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
 
-            logger.log(Level.INFO, "The transmission time of the file is: " + element.getTime());
+			logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
 
-            filesToSend.add(element);
-        }
-    }
+			element.setTime(System.currentTimeMillis() + delayTime * 1000);
 
-    private void deleteSource(FileElement element) {
-        if (!new File(element.getFile().getAbsolutePath()).delete()) {
-            logger.log(Level.WARNING, "Could not delete source file " + element.getFile().getAbsolutePath());
-        }
-    }
+			logger.log(Level.INFO, "The transmission time of the file is: " + element.getTime());
 
-    private void transferFile(FileElement element) {
-        ExitStatus command;
-        String xxhash = null;
+			Main.transferWatcher.addElement(element);
+		}
+	}
 
-        try {
-            command = Eos.transfer(element.getFile().getAbsolutePath(), element.getSurl(), element.getSeioDaemons(),
-                    element.getFile().length(), element.getNrTries());
-            if (command.getStdOut().contains("checksum=xxhash64")) {
-                xxhash = command.getStdOut().split("checksum=xxhash64")[1].trim();
-                logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
-                        + element.getFile().getName());
-            } else
-                logger.log(Level.WARNING, "Could not receive the xxhash from the transfer command");
+	private void deleteSource(FileElement element) {
+		if (!element.getFile().delete()) {
+			logger.log(Level.WARNING, "Could not delete source file " + element.getFile().getAbsolutePath());
+		}
+	}
 
-            if (command.getExtProcExitStatus() != 0)
-                checkTransferStatus(badTransfer, element, xxhash);
-            else
-                checkTransferStatus(successfulTransfer, element, xxhash);
-        } catch (InterruptedException | IOException e) {
-            e.printStackTrace();
-        }
-    }
+	private void transferFile(FileElement element) {
+		ExitStatus command;
+		String xxhash = null;
 
-    @Override
-    public void run() {
-        FileElement file;
+		try {
+			command = Eos.transfer(element.getFile().getAbsolutePath(), element.getSurl(), element.getSeioDaemons(),
+					element.getFile().length(), element.getNrTries());
+			if (command.getStdOut().contains("checksum=xxhash64")) {
+				xxhash = command.getStdOut().split("checksum=xxhash64")[1].trim();
+				logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
+						+ element.getFile().getName());
+			}
+			else
+				logger.log(Level.WARNING, "Could not receive the xxhash from the transfer command");
 
-        try {
-            while (true) {
-                logger.log(Level.INFO, "Total number of files to be transferred: " + filesToSend.size());
+			if (command.getExtProcExitStatus() != 0)
+				checkTransferStatus(badTransfer, element, xxhash);
+			else
+				checkTransferStatus(successfulTransfer, element, xxhash);
+		}
+		catch (InterruptedException | IOException e) {
+			e.printStackTrace();
+		}
+	}
 
-                file = filesToSend.take();
-                if (file == null)
-                    continue;
+	@Override
+	public void run() {
+		logger.log(Level.INFO, "Total number of files transmitted in parallel: " + Main.nrFilesOnSend.getAndIncrement());
 
-                logger.log(Level.INFO, "Total number of files transmitted in parallel: "
-                        + Main.nrFilesOnSend.getAndIncrement());
-
-                monitor.addMeasurement("active_transfers", 1);
-
-                transferFile(file);
-
-                Main.nrFilesOnSend.getAndDecrement();
-            }
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } finally {
-            monitor.addMeasurement("active_transfers", -1);
-        }
-    }
+		try {
+			transferFile(toTransfer);
+		}
+		finally {
+			Main.nrFilesOnSend.getAndDecrement();
+		}
+	}
 }

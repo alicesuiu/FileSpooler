@@ -1,222 +1,251 @@
 package spooler;
 
-import alien.catalogue.GUIDUtils;
-import alien.config.ConfigUtils;
-import lazyj.ExtProperties;
-import java.io.*;
-import java.nio.file.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchEvent;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.DelayQueue;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import alien.catalogue.GUIDUtils;
+import alien.config.ConfigUtils;
+import lazyj.ExtProperties;
 
 /**
  * @author asuiu
  * @since March 30, 2021
  */
 public class FileWatcher implements Runnable {
-    private final Logger logger = ConfigUtils.getLogger(FileWatcher.class.getCanonicalName());
-    private AtomicInteger nrFilesWatched = new AtomicInteger(0);
-    private final File directory;
-    private Map<String, FileExecutor> executors;
-    private final String command;
+	private final Logger logger = ConfigUtils.getLogger(FileWatcher.class.getCanonicalName());
+	private AtomicInteger nrFilesWatched = new AtomicInteger(0);
+	private final File directory;
+	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
+	private final boolean isTransfer;
 
-    FileWatcher(File directory, Map<String, FileExecutor> executors, String command) {
-        this.directory = directory;
-        this.executors = executors;
-        this.command = command;
-    }
+	FileWatcher(File directory, boolean isTransfer) {
+		this.directory = directory;
+		this.isTransfer = isTransfer;
+	}
 
-    @Override
-    public void run() {
-        addFilesToSend(directory.getAbsolutePath());
+	@Override
+	public void run() {
+		addFilesToSend(directory.getAbsolutePath());
 
-        try (WatchService watchService = FileSystems.getDefault().newWatchService()) {
-            Path path = Paths.get(directory.getAbsolutePath());
-            path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+		try (FileSystem fs = FileSystems.getDefault(); WatchService watchService = fs.newWatchService()) {
+			Path path = Paths.get(directory.getAbsolutePath());
+			path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
 
-            WatchKey key;
-            while ((key = watchService.take()) != null) {
-                for (WatchEvent<?> event : key.pollEvents()) {
-                    Path filePath = Paths.get(directory.getAbsolutePath() + "/" + event.context());
-                    File file = filePath.toFile();
+			WatchKey key;
+			while ((key = watchService.take()) != null) {
+				for (WatchEvent<?> event : key.pollEvents()) {
+					Path filePath = Paths.get(directory.getAbsolutePath() + "/" + event.context());
+					File file = filePath.toFile();
 
-                    if (file.getName().endsWith(".done")) {
-                        FileElement element = readMetadata(file);
-                        if (element == null)
-                            continue;
-                        addElement(element);
-                        logger.log(Level.INFO, Thread.currentThread().getName()
-                                + " processed a number of " + nrFilesWatched.incrementAndGet() + " files");
-                        logger.log(Level.INFO, "The file " + element.getFile().getAbsolutePath() + " from "
-                                + directory.getAbsolutePath() + " was queued");
-                    }
-                }
-                key.reset();
-            }
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
+					if (file.getName().endsWith(".done")) {
+						FileElement element = readMetadata(file);
+						if (element == null)
+							continue;
+						addElement(element);
+						logger.log(Level.INFO, Thread.currentThread().getName()
+								+ " processed a number of " + nrFilesWatched.incrementAndGet() + " files");
+						logger.log(Level.INFO, "The file " + element.getFile().getAbsolutePath() + " from "
+								+ directory.getAbsolutePath() + " was queued");
+					}
+				}
+				key.reset();
+			}
+		}
+		catch (IOException | InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
 
-    void watch() {
-        if (directory.exists()) {
-            Thread thread = new Thread(this);
-            thread.setDaemon(true);
-            thread.start();
-            thread.setName("Watcher Thread for " + directory.getAbsolutePath() + " directory");
-        }
-    }
+	void watch() {
+		if (directory.exists()) {
+			Thread thread = new Thread(this);
+			thread.setDaemon(true);
+			thread.start();
+			thread.setName("Watcher Thread for " + directory.getAbsolutePath() + " directory");
+		}
+	}
 
-    private void addFilesToSend(String sourceDirPath) {
-        try {
-            int i;
-            File dir = new File(sourceDirPath);
-            File[] files = dir.listFiles();
+	private void addFilesToSend(String sourceDirPath) {
+		try {
+			int i;
+			File dir = new File(sourceDirPath);
+			File[] files = dir.listFiles();
 
-            assert files != null;
-            for (i = 0; i < files.length; i++) {
-                if (files[i].getName().endsWith(".done")) {
-                    FileElement element = readMetadata(files[i]);
-                    if (element == null)
-                        continue;
-                    addElement(element);
-                }
-            }
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
-    }
+			assert files != null;
+			for (i = 0; i < files.length; i++) {
+				if (files[i].getName().endsWith(".done")) {
+					FileElement element = readMetadata(files[i]);
+					if (element == null)
+						continue;
+					addElement(element);
+				}
+			}
+		}
+		catch (Exception e) {
+			System.out.println(e.getMessage());
+		}
+	}
 
-    private void addElement(FileElement element) {
-        int nrThreads;
+	void addElement(FileElement element) {
+		ScheduledExecutorService executor = executors.computeIfAbsent(isTransfer ? element.getPriority() : "low", (k) -> {
+			int nrThreads;
 
-        if (command.equals("transfer")) {
-            if (!executors.containsKey(element.getPriority())) {
-                nrThreads = Main.spoolerProperties.geti("queue." + element.getPriority() + ".threads",
-                        Main.spoolerProperties.geti("queue.default.threads", Main.defaultTransferThreads));
-                FileExecutor executor = new FileExecutor(new DelayQueue<>(), nrThreads);
-                executors.put(element.getPriority(), executor);
-                executor.getThreadPool().submit(new Spooler(executor.getQueue()));
-            }
-            executors.get(element.getPriority()).getQueue().add(element);
-        } else {
-            if (executors.isEmpty()) {
-                nrThreads = Main.spoolerProperties.geti("queue.reg.threads", Main.defaultRegistrationThreads);
-                FileExecutor executor = new FileExecutor(new LinkedBlockingDeque<>(), nrThreads);
-                executors.put("low", executor);
-                executor.getThreadPool().submit(new Registrator(executor.getQueue()));
-            }
-            executors.get("low").getQueue().add(element);
-        }
-    }
+			if (isTransfer)
+				nrThreads = Main.spoolerProperties.geti("queue." + element.getPriority() + ".threads",
+						Main.spoolerProperties.geti("queue.default.threads", Main.defaultTransferThreads));
+			else
+				nrThreads = Main.spoolerProperties.geti("queue.reg.threads", Main.defaultRegistrationThreads);
 
-    private String generateURL(String prefix, String period,
-                                      String run, String type, String filename) {
+			ScheduledThreadPoolExecutor service = new ScheduledThreadPoolExecutor(nrThreads, (r) -> new Thread(r, k + "/" + isTransfer));
+			service.setKeepAliveTime(1L, TimeUnit.MINUTES);
+			service.allowCoreThreadTimeOut(true);
 
-        String url = "";
+			return service;
+		});
 
-        url += prefix + "/";
-        url += (new Date().getYear() + 1900) + "/";
-        url += period + "/";
-        url += run  + "/";
-        url += type;
-        url += filename;
+		executor.schedule(isTransfer ? new Spooler(element) : new Registrator(element), element.getDelay(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS);
+	}
 
-        return url;
-    }
+	private static String generateURL(String prefix, String period,
+			String run, String type, String filename) {
 
-    private FileElement readMetadata(File file) throws IOException {
-        String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority;
-        long size, ctime, xxhash;
-        UUID guid;
+		String url = "";
 
-        try(InputStream inputStream = new FileInputStream(file);
-            FileWriter writeFile = new FileWriter(file.getAbsolutePath(), true)) {
+		url += prefix + "/";
+		url += (new Date().getYear() + 1900) + "/";
+		url += period + "/";
+		url += run + "/";
+		url += type;
+		url += filename;
 
-            ExtProperties prop = new ExtProperties(inputStream);
+		return url;
+	}
 
-            lurl = prop.gets("lurl", null);
-            run = prop.gets("run", null);
-            LHCPeriod = prop.gets("LHCPeriod", null);
+	private FileElement readMetadata(File file) throws IOException {
+		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority;
+		long size, ctime, xxhash;
+		UUID guid;
 
-            if (lurl == null || run == null || LHCPeriod == null) {
-                logger.log(Level.WARNING, "Missing mandatory attributes");
-                path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
-                        + file.getAbsolutePath().substring(file.getAbsolutePath().lastIndexOf('/'));
-                Files.move(Paths.get(file.getAbsolutePath()), Paths.get(path), StandardCopyOption.REPLACE_EXISTING);
-                return null;
-            }
+		try (InputStream inputStream = new FileInputStream(file);
+				FileWriter writeFile = new FileWriter(file.getAbsolutePath(), true)) {
 
-            type = prop.gets("type", null);
-            size = prop.getl("size", 0);
-            ctime = prop.getl("ctime", 0);
-            uuid = prop.gets("guid", null);
+			ExtProperties prop = new ExtProperties(inputStream);
 
-            surl = prop.gets("surl", null);
-            curl = prop.gets("curl", null);
-            md5 = prop.gets("md5", null);
-            xxhash = prop.getl("xxHash64", 0);
+			lurl = prop.gets("lurl", null);
+			run = prop.gets("run", null);
+			LHCPeriod = prop.gets("LHCPeriod", null);
 
-            seName = prop.gets("seName", null);
-            seioDaemons = prop.gets("seioDaemons", null);
-            priority = prop.gets("priority", null);
+			if (lurl == null || run == null || LHCPeriod == null) {
+				logger.log(Level.WARNING, "Missing mandatory attributes");
+				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
+						+ file.getAbsolutePath().substring(file.getAbsolutePath().lastIndexOf('/'));
 
-            if (type == null || type.length() == 0) {
-                type = "raw";
-                writeFile.write("type" + ": " + type + "\n");
-            }
+				// TODO handle IO errors while moving files
+				Files.move(Paths.get(file.getAbsolutePath()), Paths.get(path), StandardCopyOption.REPLACE_EXISTING);
+				return null;
+			}
 
-            if (size == 0) {
-                size = Files.size(Paths.get(lurl));
-                writeFile.write("size" + ": " + size + "\n");
-            }
+			type = prop.gets("type", null);
+			size = prop.getl("size", 0);
+			ctime = prop.getl("ctime", 0);
+			uuid = prop.gets("guid", null);
 
-            if (ctime == 0) {
-                ctime = new File(lurl).lastModified();
-                writeFile.write("ctime" + ": " + ctime + "\n");
-            }
+			surl = prop.gets("surl", null);
+			curl = prop.gets("curl", null);
+			md5 = prop.gets("md5", null);
+			xxhash = prop.getl("xxHash64", 0);
 
-            if (uuid == null || uuid.length() == 0) {
-                guid = GUIDUtils.generateTimeUUID();
-                writeFile.write("guid" + ": " + guid + "\n");
-            } else
-                guid = UUID.fromString(uuid);
+			seName = prop.gets("seName", null);
+			seioDaemons = prop.gets("seioDaemons", null);
+			priority = prop.gets("priority", null);
 
-            if (surl == null || surl.length() == 0) {
-                surl = generateURL("/eos/test", LHCPeriod, run,
-                        type, lurl.substring(lurl.lastIndexOf('/')));
-                writeFile.write("surl" + ": " + surl + "\n");
-            }
+			if (type == null || seioDaemons.isBlank()) {
+				type = "raw";
+				writeFile.write("type" + ": " + type + "\n");
+			}
 
-            if (curl == null || curl.length() == 0) {
-                curl = generateURL("/localhost/localdomain/user/j/jalien", LHCPeriod, run,
-                        type, lurl.substring(lurl.lastIndexOf('/')));
-                writeFile.write("curl" + ": " + curl + "\n");
-            }
+			long realSize = Files.size(Paths.get(lurl));
 
-            if (seName == null || seName.length() == 0) {
-                seName = Main.spoolerProperties.gets("seName", Main.defaultSEName);
-                writeFile.write("seName" + ": " + seName + "\n");
-            }
+			if (size == 0) {
+				size = realSize;
+				writeFile.write("size" + ": " + size + "\n");
+			}
+			else
+				if (size != realSize) {
+					logger.log(Level.WARNING, "Size of " + lurl + " is different than what the metadata indicates (" + size + " vs " + realSize + ")");
 
-            if (seioDaemons == null || seioDaemons.length() == 0) {
-                seioDaemons = Main.spoolerProperties.gets("seioDaemons", Main.defaultseioDaemons);
-                writeFile.write("seioDaemons" + ": " + seioDaemons + "\n");
-            }
+					path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
+							+ file.getAbsolutePath().substring(file.getAbsolutePath().lastIndexOf('/'));
+					// TODO handle IO errors while moving files
+					Files.move(Paths.get(file.getAbsolutePath()), Paths.get(path), StandardCopyOption.REPLACE_EXISTING);
+					return null;
+				}
 
-            if (priority == null || priority.length() == 0) {
-                priority = "low";
-                writeFile.write("priority" + ": " + priority + "\n");
-            }
-        }
+			if (ctime == 0) {
+				ctime = new File(lurl).lastModified();
+				writeFile.write("ctime" + ": " + ctime + "\n");
+			}
 
-        return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
-                file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons, priority);
-    }
+			if (uuid == null || seioDaemons.isBlank() || !GUIDUtils.isValidGUID(uuid)) {
+				guid = GUIDUtils.generateTimeUUID();
+				writeFile.write("guid" + ": " + guid + "\n");
+			}
+			else
+				guid = UUID.fromString(uuid);
+
+			if (surl == null || seioDaemons.isBlank()) {
+				surl = generateURL("/eos/test", LHCPeriod, run,
+						type, lurl.substring(lurl.lastIndexOf('/')));
+				writeFile.write("surl" + ": " + surl + "\n");
+			}
+
+			if (curl == null || seioDaemons.isBlank()) {
+				curl = generateURL("/localhost/localdomain/user/j/jalien", LHCPeriod, run,
+						type, lurl.substring(lurl.lastIndexOf('/')));
+				writeFile.write("curl" + ": " + curl + "\n");
+			}
+
+			if (seName == null || seioDaemons.isBlank()) {
+				seName = Main.spoolerProperties.gets("seName", Main.defaultSEName);
+				writeFile.write("seName" + ": " + seName + "\n");
+			}
+
+			if (seioDaemons == null || seioDaemons.isBlank()) {
+				seioDaemons = Main.spoolerProperties.gets("seioDaemons", Main.defaultseioDaemons);
+				writeFile.write("seioDaemons" + ": " + seioDaemons + "\n");
+			}
+
+			if (priority == null || priority.isBlank()) {
+				priority = "low";
+				writeFile.write("priority" + ": " + priority + "\n");
+			}
+		}
+
+		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
+				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons, priority);
+	}
 
 }

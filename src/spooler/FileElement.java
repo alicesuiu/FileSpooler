@@ -51,87 +51,87 @@ public class FileElement implements Delayed {
         file = new File(lurl);
     }
 
-    public File getFile() {
+    File getFile() {
         return file;
     }
 
-    public int getNrTries() {
+    int getNrTries() {
         return nrTries;
     }
 
-    public long getTime() {
+    long getTime() {
         return time;
     }
 
-    public String getMd5() {
+    String getMd5() {
         return md5;
     }
 
-    public long getXXHash() {
+    long getXXHash() {
         return xxhash;
     }
 
-    public String getMetaFilePath() {
+    String getMetaFilePath() {
         return metaFilePath;
     }
 
-    public String getSurl() {
+    String getSurl() {
         return surl;
     }
 
-    public long getSize() {
+    long getSize() {
         return size;
     }
 
-    public String getRun() {
+    String getRun() {
         return run;
     }
 
-    public UUID getGuid() {
+    UUID getGuid() {
         return guid;
     }
 
-    public long getCtime() {
+    long getCtime() {
         return ctime;
     }
 
-    public String getLHCPeriod() {
+    String getLHCPeriod() {
         return LHCPeriod;
     }
 
-    public String getCurl() {
+    String getCurl() {
         return curl;
     }
 
-    public String getSeName() {
+    String getSeName() {
         return seName;
     }
 
-    public String getSeioDaemons() {
+    String getSeioDaemons() {
         return seioDaemons;
     }
 
-    public String getType() {
+    String getType() {
         return type;
     }
 
-    public String getPriority() {
+    String getPriority() {
         return priority;
     }
 
-    public void setXXHash(long xxhash) {
+    void setXXHash(long xxhash) {
         this.xxhash = xxhash;
     }
 
-    public void setMd5(String md5) {
+    void setMd5(String md5) {
         this.md5 = md5;
     }
 
-    public void setTime(long time) {
+    void setTime(long time) {
         this.time = time;
     }
 
-    public void setNrTries(int nrTries) {
+    void setNrTries(int nrTries) {
         this.nrTries = nrTries;
     }
 
