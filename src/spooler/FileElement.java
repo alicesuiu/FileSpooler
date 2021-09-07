@@ -25,10 +25,13 @@ public class FileElement implements Delayed {
     private final String metaFilePath;
     private final String type;
     private final String seName;
+    private final String seioDaemons;
+    private final String priority;
 
     FileElement(String md5, String surl, long size, String run,
                 UUID guid, long ctime, String LHCPeriod, String metaFilePath,
-                long xxhash, String lurl, String type, String curl, String seName) {
+                long xxhash, String lurl, String type, String curl, String seName,
+                String seioDaemons, String priority) {
         this.md5 = md5;
         this.surl = surl;
         this.curl = curl;
@@ -41,6 +44,8 @@ public class FileElement implements Delayed {
         this.xxhash = xxhash;
         this.type = type;
         this.seName = seName;
+        this.seioDaemons = seioDaemons;
+        this.priority = priority;
         nrTries = 0;
         time = System.currentTimeMillis();
         file = new File(lurl);
@@ -102,6 +107,18 @@ public class FileElement implements Delayed {
         return seName;
     }
 
+    public String getSeioDaemons() {
+        return seioDaemons;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public String getPriority() {
+        return priority;
+    }
+
     public void setXXHash(long xxhash) {
         this.xxhash = xxhash;
     }
@@ -135,6 +152,8 @@ public class FileElement implements Delayed {
                 ", metaFilePath='" + metaFilePath + '\'' +
                 ", type='" + type + '\'' +
                 ", seName='" + seName + '\'' +
+                ", seioDaemons='" + seioDaemons + '\'' +
+                ", priority='" + priority + '\'' +
                 '}';
         return sb;
     }

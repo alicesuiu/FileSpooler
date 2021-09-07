@@ -52,7 +52,6 @@ public class Spooler implements Runnable {
                 writeFile.write("xxHash64" + ": " + element.getXXHash() + "\n");
 
                 monitor.addMeasurement("xxhash_file_size", element.getSize());
-
                 monitor.incrementCounter("nr_xxhash_ops");
             }
         }
@@ -77,14 +76,16 @@ public class Spooler implements Runnable {
         }
     }
 
-    private void checkTransferStatus(int exitCode, FileElement element, String xxhash) throws IOException {
+    private void checkTransferStatus(int exitCode, FileElement element, String xxhash)
+            throws IOException, InterruptedException {
         long delayTime;
 
         if (exitCode == successfulTransfer && checkDataIntegrity(element, xxhash)) {
             Main.nrFilesSent.getAndIncrement();
             logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
             logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
-            monitor.incrementCounter("files_successfully_transferred");
+            monitor.incrementCacheHits("transferred_files");
+            monitor.addMeasurement("nr_transmitted_bytes", element.getSize());
 
             if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
                 && (element.getMd5() == null)) {
@@ -95,13 +96,17 @@ public class Spooler implements Runnable {
                 }
             }
 
+            Eos.transfer(element.getMetaFilePath(), element.getSurl().concat(".meta"),
+                    element.getSeioDaemons(), new File(element.getMetaFilePath()).length(), 0);
+            logger.log(Level.INFO, "The " + element.getMetaFilePath() + " file is successfully sent!");
+
             writeCMetadata(element);
             deleteSource(element);
         } else {
             Main.nrFilesFailed.getAndIncrement();
             logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
             logger.log(Level.INFO, "Total number of files whose transmission failed: " + Main.nrFilesFailed.get());
-            monitor.incrementCounter("files_transmission_failed");
+            monitor.incrementCacheMisses("transferred_files");
 
             element.setNrTries(element.getNrTries() + 1);
             delayTime = Math.min(1 << element.getNrTries(),
@@ -123,11 +128,32 @@ public class Spooler implements Runnable {
         }
     }
 
+    private void transferFile(FileElement element) {
+        ExitStatus command;
+        String xxhash = null;
+
+        try {
+            command = Eos.transfer(element.getFile().getAbsolutePath(), element.getSurl(), element.getSeioDaemons(),
+                    element.getFile().length(), element.getNrTries());
+            if (command.getStdOut().contains("checksum=xxhash64")) {
+                xxhash = command.getStdOut().split("checksum=xxhash64")[1].trim();
+                logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
+                        + element.getFile().getName());
+            } else
+                logger.log(Level.WARNING, "Could not receive the xxhash from the transfer command");
+
+            if (command.getExtProcExitStatus() != 0)
+                checkTransferStatus(badTransfer, element, xxhash);
+            else
+                checkTransferStatus(successfulTransfer, element, xxhash);
+        } catch (InterruptedException | IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     @Override
     public void run() {
         FileElement file;
-        ExitStatus command;
-        String xxhash = null;
 
         try {
             while (true) {
@@ -139,32 +165,17 @@ public class Spooler implements Runnable {
 
                 logger.log(Level.INFO, "Total number of files transmitted in parallel: "
                         + Main.nrFilesOnSend.getAndIncrement());
-                monitor.incrementCounter("files_transferred");
 
-                try {
-                    monitor.addMeasurement("active_transfers", 1);
+                monitor.addMeasurement("active_transfers", 1);
 
-                    command = Eos.transfer(file);
-                    if (command.getStdOut().contains("checksum=xxhash64")) {
-                        xxhash = command.getStdOut().split("checksum=xxhash64")[1].trim();
-                        logger.log(Level.INFO, "Received xxhash checksum: " + xxhash + " for "
-                                + file.getFile().getName());
-                    }
-                    else
-                        logger.log(Level.WARNING, "Could not receive the xxhash from the transfer command");
+                transferFile(file);
 
-                    if (command.getExtProcExitStatus() != 0)
-                        checkTransferStatus(badTransfer, file, xxhash);
-                    else
-                        checkTransferStatus(successfulTransfer, file, xxhash);
-
-                    Main.nrFilesOnSend.getAndDecrement();
-                } finally {
-                    monitor.addMeasurement("active_transfers", -1);
-                }
+                Main.nrFilesOnSend.getAndDecrement();
             }
-        } catch (IOException | InterruptedException e) {
+        } catch (InterruptedException e) {
             e.printStackTrace();
+        } finally {
+            monitor.addMeasurement("active_transfers", -1);
         }
     }
 }

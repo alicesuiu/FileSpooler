@@ -3,7 +3,6 @@ package spooler;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
-import alien.se.SEUtils;
 import lia.util.process.ExternalProcess.ExitStatus;
 import utils.ProcessWithTimeout;
 import java.io.IOException;
@@ -18,14 +17,15 @@ import java.util.concurrent.TimeUnit;
 public class Eos {
     private static final Monitor monitor = MonitorFactory.getMonitor(Eos.class.getCanonicalName());
 
-    private static long getWaitTimeSend(FileElement element) {
+    private static long getWaitTimeSend(long size, int nrTries) {
         long bandwith;
 
-        bandwith = (100000 << 3) / Main.nrFilesOnSend.get() / (element.getNrTries() + 1);
-        return element.getFile().length() / bandwith;
+        bandwith = (100000 << 3) / Main.nrFilesOnSend.get() / (nrTries + 1);
+        return size / bandwith;
     }
 
-    static ExitStatus transfer(FileElement element) throws IOException, InterruptedException {
+    static ExitStatus transfer(String src, String dest, String seioDaemons, long size, int nrTries)
+            throws IOException, InterruptedException {
         long timeWaitSend;
         ProcessBuilder shellProcess;
         Process process;
@@ -33,15 +33,15 @@ public class Eos {
         List<String> cmd = new ArrayList<>();
 
         cmd.add("eos");
-        cmd.add(SEUtils.getSE(element.getSeName()).seioDaemons);
+        cmd.add(seioDaemons);
         cmd.add("cp");
         cmd.add("-n");
         cmd.add("-s");
         //cmd.add("-b");
         //cmd.add("33554432");
         cmd.add("--checksum");
-        cmd.add("file:" + element.getFile().getAbsolutePath());
-        cmd.add(element.getSurl());
+        cmd.add("file:" + src);
+        cmd.add(dest);
 
         // TODO for rate limiting :
         // -t <integer value, in MB/s>
@@ -52,7 +52,7 @@ public class Eos {
             shellProcess.command(cmd);
             process = shellProcess.start();
             processTimeout = new ProcessWithTimeout(process, shellProcess);
-            timeWaitSend = getWaitTimeSend(element);
+            timeWaitSend = 100000000000L; //getWaitTimeSend(size, nrTries);
             processTimeout.waitFor(timeWaitSend, TimeUnit.SECONDS);
 
             return processTimeout.getExitStatus();
