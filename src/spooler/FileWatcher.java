@@ -10,7 +10,6 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
@@ -28,14 +27,17 @@ import java.util.logging.Logger;
 
 import alien.catalogue.GUIDUtils;
 import alien.config.ConfigUtils;
+import alien.monitoring.Monitor;
+import alien.monitoring.MonitorFactory;
 import lazyj.ExtProperties;
 
 /**
  * @author asuiu
  * @since March 30, 2021
  */
-public class FileWatcher implements Runnable {
-	private final Logger logger = ConfigUtils.getLogger(FileWatcher.class.getCanonicalName());
+class FileWatcher implements Runnable {
+	private static final Logger logger = ConfigUtils.getLogger(FileWatcher.class.getCanonicalName());
+    private static final Monitor monitor = MonitorFactory.getMonitor(FileWatcher.class.getCanonicalName());
 	private AtomicInteger nrFilesWatched = new AtomicInteger(0);
 	private final File directory;
 	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
@@ -69,6 +71,7 @@ public class FileWatcher implements Runnable {
 								+ " processed a number of " + nrFilesWatched.incrementAndGet() + " files");
 						logger.log(Level.INFO, "The file " + element.getFile().getAbsolutePath() + " from "
 								+ directory.getAbsolutePath() + " was queued");
+						monitor.incrementCounter("nr_files_processed_by_" + (isTransfer ? "transfer_watcher" : "reg_watcher"));
 					}
 				}
 				key.reset();
@@ -105,7 +108,7 @@ public class FileWatcher implements Runnable {
 			}
 		}
 		catch (Exception e) {
-			System.out.println(e.getMessage());
+			logger.log(Level.WARNING, "Caught exception: ", e);
 		}
 	}
 
@@ -160,11 +163,8 @@ public class FileWatcher implements Runnable {
 
 			if (lurl == null || run == null || LHCPeriod == null) {
 				logger.log(Level.WARNING, "Missing mandatory attributes");
-				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
-						+ file.getAbsolutePath().substring(file.getAbsolutePath().lastIndexOf('/'));
-
-				// TODO handle IO errors while moving files
-				Files.move(Paths.get(file.getAbsolutePath()), Paths.get(path), StandardCopyOption.REPLACE_EXISTING);
+				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + file.getName();
+				Main.moveFile(logger, file.getAbsolutePath(), path);
 				return null;
 			}
 
@@ -187,22 +187,20 @@ public class FileWatcher implements Runnable {
 				writeFile.write("type" + ": " + type + "\n");
 			}
 
-			long realSize = Files.size(Paths.get(lurl));
-
 			if (size == 0) {
-				size = realSize;
+				size = Files.size(Paths.get(lurl));
 				writeFile.write("size" + ": " + size + "\n");
-			}
-			else
-				if (size != realSize) {
-					logger.log(Level.WARNING, "Size of " + lurl + " is different than what the metadata indicates (" + size + " vs " + realSize + ")");
+			} else if (isTransfer) {
+                long realSize = Files.size(Paths.get(lurl));
+                if (size != realSize) {
+                    logger.log(Level.WARNING, "Size of " + lurl
+                            + " is different than what the metadata indicates (" + size + " vs " + realSize + ")");
 
-					path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
-							+ file.getAbsolutePath().substring(file.getAbsolutePath().lastIndexOf('/'));
-					// TODO handle IO errors while moving files
-					Files.move(Paths.get(file.getAbsolutePath()), Paths.get(path), StandardCopyOption.REPLACE_EXISTING);
-					return null;
-				}
+                    path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + file.getName();
+                    Main.moveFile(logger, file.getAbsolutePath(), path);
+                    return null;
+                }
+			}
 
 			if (ctime == 0) {
 				ctime = new File(lurl).lastModified();

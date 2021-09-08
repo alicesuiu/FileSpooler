@@ -1,15 +1,19 @@
 package spooler;
 
+import alien.config.ConfigUtils;
+
 import java.io.File;
 import java.util.UUID;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * @author asuiu
  * @since March 30, 2021
  */
-public class FileElement implements Delayed {
+class FileElement implements Delayed {
     private final File file;
     private int nrTries;
     private long time;
@@ -27,6 +31,8 @@ public class FileElement implements Delayed {
     private final String seName;
     private final String seioDaemons;
     private final String priority;
+
+    private static final Logger logger = ConfigUtils.getLogger(FileElement.class.getCanonicalName());
 
     FileElement(String md5, String surl, long size, String run,
                 UUID guid, long ctime, String LHCPeriod, String metaFilePath,
@@ -127,14 +133,6 @@ public class FileElement implements Delayed {
         this.md5 = md5;
     }
 
-    void setTime(long time) {
-        this.time = time;
-    }
-
-    void setNrTries(int nrTries) {
-        this.nrTries = nrTries;
-    }
-
     @Override
     public String toString() {
         String sb = "FileElement{" + "file=" + file +
@@ -168,5 +166,17 @@ public class FileElement implements Delayed {
     @Override
     public int compareTo(Delayed delayed) {
         return Long.compare(getDelay(TimeUnit.SECONDS), delayed.getDelay(TimeUnit.SECONDS));
+    }
+
+    void computeDelay() {
+        long delayTime;
+
+        nrTries += 1;
+        delayTime = Math.min(1 << nrTries,
+                Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
+
+        logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
+        time = System.currentTimeMillis() + delayTime * 1000;
+        logger.log(Level.INFO, "The transmission time of the file is: " + time);
     }
 }

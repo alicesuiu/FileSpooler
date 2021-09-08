@@ -7,12 +7,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import javax.servlet.http.HttpServletResponse;
 
 import alien.catalogue.GUIDUtils;
@@ -25,16 +21,15 @@ import alien.site.supercomputing.titan.Pair;
  * @author asuiu
  * @since August 24, 2021
  */
-public class Registrator implements Runnable {
-	private final Logger logger = ConfigUtils.getLogger(Registrator.class.getCanonicalName());
-	private final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
-
-	private final String URL = "http://172.30.0.1:8080/daqreg.jsp";
-
+class Registrator implements Runnable {
+	private static final Logger logger = ConfigUtils.getLogger(Registrator.class.getCanonicalName());
+	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 	private final FileElement toRegister;
 
-	Registrator(final FileElement element) {
-		this.toRegister = element;
+    private static final String URL = "http://172.30.0.1:8080/daqreg.jsp";
+
+	Registrator(final FileElement toRegister) {
+		this.toRegister = toRegister;
 	}
 
 	private static String encode(final String s) {
@@ -60,8 +55,8 @@ public class Registrator implements Runnable {
 		return urlParam;
 	}
 
-	private Pair<Integer, String> sendRequest(FileElement element) {
-		int status = -1;
+	private static Pair<Integer, String> sendRequest(FileElement element) {
+		Integer status = -1;
 		String response = "";
 
 		try {
@@ -91,75 +86,86 @@ public class Registrator implements Runnable {
 			Main.registrationWatcher.addElement(element);
 		}
 
-		return new Pair<>(Integer.valueOf(status), response);
+		return new Pair<>(status, response);
 	}
 
-	private void registerFile(FileElement element) throws IOException {
-		Integer status;
-		String msg;
+    private void onSuccess(FileElement element, boolean isMetadata) {
+	    Main.nrFilesRegistered.getAndIncrement();
+        logger.log(Level.INFO, "Successfuly registered: " + element.getCurl());
+        logger.log(Level.INFO, "Total number of files successfully registered: "
+                + Main.nrFilesRegistered.get());
+        monitor.incrementCacheHits("registered_files");
 
-		Pair<Integer, String> response = sendRequest(element);
-		status = response.getFirst();
-		msg = response.getSecond();
+        if (isMetadata) {
+            if (!element.getFile().delete())
+                logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
+        }
+    }
 
-		if (status.intValue() == HttpServletResponse.SC_OK || status.intValue() == HttpServletResponse.SC_CREATED) {
-			Main.nrFilesRegistered.getAndIncrement();
-			logger.log(Level.INFO, "Successfuly registered: " + element.getCurl());
-			logger.log(Level.INFO, "Total number of files successfully registered: "
-					+ Main.nrFilesRegistered.get());
-			monitor.incrementCacheHits("registered_files");
+    private void onFail(FileElement element, boolean isMetadata, String msg, Integer status) {
+        Main.nrFilesRegFailed.getAndIncrement();
+        logger.log(Level.INFO, String.valueOf(msg));
+        logger.log(Level.INFO, "Total number of files whose registration failed: "
+                + Main.nrFilesRegFailed.get());
+        monitor.incrementCacheMisses("registered_files");
 
-			FileElement metadataFile = new FileElement(
-					null,
-					element.getSurl().concat(".meta"),
-					new File(element.getMetaFilePath()).length(),
-					element.getRun(),
-					GUIDUtils.generateTimeUUID(),
-					new File(element.getMetaFilePath()).lastModified(),
-					element.getLHCPeriod(),
-					null,
-					0,
-					element.getMetaFilePath(),
-					element.getType(),
-					element.getCurl().concat(".meta"),
-					element.getSeName(),
-					element.getSeioDaemons(),
-					null);
+        if (!isMetadata) {
+            if (status == HttpServletResponse.SC_SERVICE_UNAVAILABLE) {
+                element.computeDelay();
+                Main.registrationWatcher.addElement(element);
+            } else {
+                String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
+                        + element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
+                Main.moveFile(logger, element.getMetaFilePath(), path);
+            }
+        }
+    }
 
-			sendRequest(metadataFile);
+	private boolean register(FileElement element, boolean isMetadata) {
+        Pair<Integer, String> response = sendRequest(element);
+        Integer status = response.getFirst();
+        String msg = response.getSecond();
 
-			// TODO is it really a success ?
-			logger.log(Level.INFO, "Successfuly registered: " + metadataFile.getCurl());
+        if (status == HttpServletResponse.SC_OK || status == HttpServletResponse.SC_CREATED) {
+            onSuccess(element, isMetadata);
+            return true;
+        }
 
-			if (!new File(element.getMetaFilePath()).delete())
-				logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
-		}
-		else {
-			// TODO handle different error types, queue back transient errors with a delay
+        onFail(element, isMetadata, msg, status);
+        return false;
+    }
 
-			Main.nrFilesRegFailed.getAndIncrement();
-			logger.log(Level.INFO, String.valueOf(msg));
-			logger.log(Level.INFO, "Total number of files whose registration failed: "
-					+ Main.nrFilesRegFailed.get());
-			monitor.incrementCacheMisses("registered_files");
-			String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
-					+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
-			Files.move(Paths.get(element.getMetaFilePath()), Paths.get(path), StandardCopyOption.REPLACE_EXISTING);
-		}
+	private void registerFile() {
+	    boolean status = register(toRegister, false);
+
+		if (status) {
+            FileElement metadataFile = new FileElement(
+                    null,
+                    toRegister.getSurl().concat(".meta"),
+                    new File(toRegister.getMetaFilePath()).length(),
+                    toRegister.getRun(),
+                    GUIDUtils.generateTimeUUID(),
+                    new File(toRegister.getMetaFilePath()).lastModified(),
+                    toRegister.getLHCPeriod(),
+                    null,
+                    0,
+                    toRegister.getMetaFilePath(),
+                    toRegister.getType(),
+                    toRegister.getCurl().concat(".meta"),
+                    toRegister.getSeName(),
+                    toRegister.getSeioDaemons(),
+                    null);
+
+            register(metadataFile, true);
+        }
 	}
 
 	@Override
 	public void run() {
-		Main.nrFilesOnRegister.incrementAndGet();
+        logger.log(Level.INFO, "Total number of files registered in parallel: "
+                + Main.nrFilesOnRegister.incrementAndGet());
 
-		try {
-			registerFile(toRegister);
-		}
-		catch (IOException e) {
-			logger.log(Level.WARNING, "Error registering a file", e);
-		}
-		finally {
-			Main.nrFilesOnRegister.decrementAndGet();
-		}
+        registerFile();
+        Main.nrFilesOnRegister.decrementAndGet();
 	}
 }
