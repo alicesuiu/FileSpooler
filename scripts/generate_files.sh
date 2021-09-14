@@ -28,7 +28,7 @@ fi
 
 # Generating files
 for ((i = 0; i < $1; i++)); do
-	filename=file_$i
-	echo $i $filename
-	dd if=/dev/urandom of=$3/$filename.root bs=$2 count=1
+	filename=file_$(uuidgen)
+	echo $filename
+	dd if=/dev/urandom of=$3/$filename.root bs=$2 count=1024
 done

@@ -2,26 +2,19 @@ import sys
 import os
 import string
 import random
-import uuid
 
-directory = sys.argv[1]
-#dest = sys.argv[2]
+dataDir = sys.argv[1]
+metadataDir = sys.argv[2]
 
-for filename in os.listdir(directory):
+for filename in os.listdir(dataDir):
 	metadata = {}
 	if filename.endswith(".root"):
-		abspath = os.path.abspath(directory + "/" + filename)
+		abspath = os.path.abspath(dataDir + "/" + filename)
 		metadata['lurl'] = abspath
 		metadata['LHCPeriod'] = 'LHC21r_PHOS'
 		metadata['run'] = ''.join(random.choice(string.digits) for _ in range(9))
 
-		#metadata['surl'] = os.path.abspath(dest + filename)
-		#metadata['size'] = os.stat(abspath).st_size
-		#metadata['ctime'] = long(os.stat(abspath).st_ctime)
-		#metadata['guid'] = uuid.uuid4()
-		#metadata['type'] = "raw"
-
-		output = directory + filename.replace('.root', '.done')
+		output = metadataDir + filename.replace('.root', '.done')
 		metafile = open(output, "w")
 		for key, value in metadata.items():
 			metafile.write(key + ": " + str(value) + "\n")
