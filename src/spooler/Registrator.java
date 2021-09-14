@@ -26,7 +26,7 @@ class Registrator implements Runnable {
 	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 	private final FileElement toRegister;
 
-    private static final String URL = "http://172.30.0.1:8080/daqreg.jsp";
+    private static final String URL = "http://pcalimonitor.cern.ch:80/epn2eos/daqreg.jsp";
 
 	Registrator(final FileElement toRegister) {
 		this.toRegister = toRegister;
@@ -68,21 +68,22 @@ class Registrator implements Runnable {
 
 			String urlParam = getURLParam(element);
 
-			try (OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream())) {
-				writer.write(urlParam);
-				writer.flush();
-			}
-			catch (IOException e) {
-				e.printStackTrace();
-			}
+			OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream());
+			writer.write(urlParam);
+			writer.flush();
+			writer.close();
 
 			status = connection.getResponseCode();
 			response = connection.getResponseMessage();
+
+			logger.log(Level.INFO, "status code HTTP: " + status);
 
 			connection.disconnect();
 		}
 		catch (IOException e) {
 			logger.log(Level.WARNING, "Communication error", e);
+			status = HttpServletResponse.SC_SERVICE_UNAVAILABLE;
+			element.computeDelay();
 			Main.registrationWatcher.addElement(element);
 		}
 
@@ -110,13 +111,15 @@ class Registrator implements Runnable {
         monitor.incrementCacheMisses("registered_files");
 
         if (!isMetadata) {
-            if (status == HttpServletResponse.SC_SERVICE_UNAVAILABLE) {
-                element.computeDelay();
-                Main.registrationWatcher.addElement(element);
-            } else {
+            if (status == HttpServletResponse.SC_BAD_REQUEST
+                    || status == HttpServletResponse.SC_FORBIDDEN
+                    || status == HttpServletResponse.SC_CONFLICT) {
                 String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
                         + element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
                 Main.moveFile(logger, element.getMetaFilePath(), path);
+            } else {
+                element.computeDelay();
+                Main.registrationWatcher.addElement(element);
             }
         }
     }
@@ -138,7 +141,7 @@ class Registrator implements Runnable {
 	private void registerFile() {
 	    boolean status = register(toRegister, false);
 
-		if (status) {
+        if (status) {
             FileElement metadataFile = new FileElement(
                     null,
                     toRegister.getSurl().concat(".meta"),
@@ -154,8 +157,7 @@ class Registrator implements Runnable {
                     toRegister.getCurl().concat(".meta"),
                     toRegister.getSeName(),
                     toRegister.getSeioDaemons(),
-                    null);
-
+                    null) ;
             register(metadataFile, true);
         }
 	}

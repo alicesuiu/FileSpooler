@@ -38,7 +38,7 @@ class Spooler implements Runnable {
 		Main.moveFile(logger, srcPath, destPath);
 	}
 
-	private static boolean checkDataIntegrity(FileElement element, String xxhash) throws IOException {
+	private static boolean checkDataIntegrity(FileElement element, String xxhash) {
 		long metaXXHash;
 		String fileXXHash;
 
@@ -55,6 +55,9 @@ class Spooler implements Runnable {
 
 				monitor.addMeasurement("xxhash_file_size", element.getSize());
 				monitor.incrementCounter("nr_xxhash_ops");
+			} catch (IOException e) {
+				logger.log(Level.WARNING, "Could not compute xxhash for "
+						+ element.getFile().getAbsolutePath(), e);
 			}
 		}
 
@@ -65,7 +68,7 @@ class Spooler implements Runnable {
 		return fileXXHash.equals(xxhash);
 	}
 
-	private static void computeMD5(FileElement element) throws IOException {
+	private static void computeMD5(FileElement element) {
 		try (FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
 			String md5Checksum;
 
@@ -75,10 +78,13 @@ class Spooler implements Runnable {
 
 			logger.log(Level.INFO, "MD5 checksum for the file " + element.getFile().getName()
 					+ " is " + element.getMd5());
+		} catch (IOException e) {
+			logger.log(Level.WARNING, "Could not compute md5 for "
+					+ element.getFile().getAbsolutePath(), e);
 		}
 	}
 
-	private void onSuccess(FileElement element, boolean isMetadata) throws IOException {
+	private void onSuccess(FileElement element, boolean isMetadata) {
         Main.nrFilesSent.getAndIncrement();
         logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
         logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
@@ -119,7 +125,7 @@ class Spooler implements Runnable {
             onSuccess(element, isMetadata);
             return  true;
         } catch (IOException e) {
-            logger.log(Level.WARNING, "Caught exception: ", e);
+            logger.log(Level.WARNING, "Transfer failed with exception", e);
             onFail(element, isMetadata);
         }
 
@@ -157,15 +163,12 @@ class Spooler implements Runnable {
                         + toTransfer.getFile().getAbsolutePath());
             }
         }
-
-
 	}
 
 	@Override
 	public void run() {
 		logger.log(Level.INFO, "Total number of files transmitted in parallel: "
                 + Main.nrFilesOnSend.incrementAndGet());
-
 		transferFile();
 		Main.nrFilesOnSend.decrementAndGet();
 	}

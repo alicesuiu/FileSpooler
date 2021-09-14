@@ -1,10 +1,6 @@
 package spooler;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -67,18 +63,21 @@ class FileWatcher implements Runnable {
 						if (element == null)
 							continue;
 						addElement(element);
+
 						logger.log(Level.INFO, Thread.currentThread().getName()
 								+ " processed a number of " + nrFilesWatched.incrementAndGet() + " files");
-						logger.log(Level.INFO, "The file " + element.getFile().getAbsolutePath() + " from "
-								+ directory.getAbsolutePath() + " was queued");
-						monitor.incrementCounter("nr_files_processed_by_" + (isTransfer ? "transfer_watcher" : "reg_watcher"));
+						logger.log(Level.INFO, "The file " + file.getAbsolutePath() + " was queued");
+
+						monitor.incrementCounter("nr_files_processed_by_"
+								+ (isTransfer ? "transfer_watcher" : "reg_watcher"));
 					}
 				}
 				key.reset();
 			}
 		}
 		catch (IOException | InterruptedException e) {
-			e.printStackTrace();
+			logger.log(Level.WARNING,
+					"Could not create " + (isTransfer ? "transfer_watcher" : "reg_watcher"), e);
 		}
 	}
 
@@ -92,23 +91,18 @@ class FileWatcher implements Runnable {
 	}
 
 	private void addFilesToSend(String sourceDirPath) {
-		try {
-			int i;
-			File dir = new File(sourceDirPath);
-			File[] files = dir.listFiles();
+		int i;
+		File dir = new File(sourceDirPath);
+		File[] files = dir.listFiles();
 
-			assert files != null;
-			for (i = 0; i < files.length; i++) {
-				if (files[i].getName().endsWith(".done")) {
-					FileElement element = readMetadata(files[i]);
-					if (element == null)
-						continue;
-					addElement(element);
-				}
+		assert files != null;
+		for (i = 0; i < files.length; i++) {
+			if (files[i].getName().endsWith(".done")) {
+				FileElement element = readMetadata(files[i]);
+				if (element == null)
+					continue;
+				addElement(element);
 			}
-		}
-		catch (Exception e) {
-			logger.log(Level.WARNING, "Caught exception: ", e);
 		}
 	}
 
@@ -133,21 +127,24 @@ class FileWatcher implements Runnable {
 	}
 
 	private static String generateURL(String prefix, String period,
-			String run, String type, String filename) {
+			String run, String type, String filename, boolean isPFN) {
 
 		String url = "";
 
 		url += prefix + "/";
 		url += (new Date().getYear() + 1900) + "/";
 		url += period + "/";
-		url += run + "/";
-		url += type;
+		url += run;
+
+		if (!isPFN)
+			url += "/" + type;
+
 		url += filename;
 
 		return url;
 	}
 
-	private FileElement readMetadata(File file) throws IOException {
+	private FileElement readMetadata(File file) {
 		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority;
 		long size, ctime, xxhash;
 		UUID guid;
@@ -163,7 +160,7 @@ class FileWatcher implements Runnable {
 
 			if (lurl == null || run == null || LHCPeriod == null) {
 				logger.log(Level.WARNING, "Missing mandatory attributes");
-				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + file.getName();
+				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path);
 				return null;
 			}
@@ -195,8 +192,7 @@ class FileWatcher implements Runnable {
                 if (size != realSize) {
                     logger.log(Level.WARNING, "Size of " + lurl
                             + " is different than what the metadata indicates (" + size + " vs " + realSize + ")");
-
-                    path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + file.getName();
+					path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
                     Main.moveFile(logger, file.getAbsolutePath(), path);
                     return null;
                 }
@@ -215,14 +211,14 @@ class FileWatcher implements Runnable {
 				guid = UUID.fromString(uuid);
 
 			if (surl == null || seioDaemons.isBlank()) {
-				surl = generateURL("/eos/test", LHCPeriod, run,
-						type, lurl.substring(lurl.lastIndexOf('/')));
+				surl = generateURL("/" + type, LHCPeriod, run,
+						type, lurl.substring(lurl.lastIndexOf('/')), true);
 				writeFile.write("surl" + ": " + surl + "\n");
 			}
 
 			if (curl == null || seioDaemons.isBlank()) {
-				curl = generateURL("/localhost/localdomain/user/j/jalien", LHCPeriod, run,
-						type, lurl.substring(lurl.lastIndexOf('/')));
+				curl = generateURL("/alice/cern.ch/user/a/asuiu", LHCPeriod, run,
+						type, lurl.substring(lurl.lastIndexOf('/')), false);
 				writeFile.write("curl" + ": " + curl + "\n");
 			}
 
@@ -240,6 +236,11 @@ class FileWatcher implements Runnable {
 				priority = "low";
 				writeFile.write("priority" + ": " + priority + "\n");
 			}
+		} catch (IOException e) {
+			logger.log(Level.WARNING, "Could not read/write the metadata file " + file.getAbsolutePath(), e);
+			path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
+			Main.moveFile(logger, file.getAbsolutePath(), path);
+			return null;
 		}
 
 		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,

@@ -7,7 +7,7 @@
 <%!
     private static final Object lock = new Object();
 	private static final Logger logger = ConfigUtils.getLogger("daqreg");
-	private static final AliEnPrincipal OWNER = UserFactory.getByUsername("jalien");
+	private static final AliEnPrincipal OWNER = UserFactory.getByUsername("asuiu");
 
 	private static final ExpirationCache<String, String> mkDirsHistory = new ExpirationCache<>(1000);%>
 <%

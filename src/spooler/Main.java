@@ -3,18 +3,16 @@ package spooler;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import alien.catalogue.LFNUtils;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
-import alien.user.AliEnPrincipal;
-import alien.user.UserFactory;
 import lazyj.ExtProperties;
 
 /**
@@ -44,7 +42,7 @@ public class Main {
 	static final String defaultRegistrationDir = System.getProperty("user.home") + "/daqSpool";
 	static final String defaultErrorDir = System.getProperty("user.home") + "/error";
 	static final String defaultSEName = "ALICE::CERN::EOSALICEO2";
-	static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094/";
+	static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
 	static final boolean defaultMd5Enable = false;
 	static final int defaultMaxBackoff = 10;
 	static final int defaultTransferThreads = 4;
@@ -52,8 +50,6 @@ public class Main {
 
 	static FileWatcher transferWatcher;
 	static FileWatcher registrationWatcher;
-
-    private static final AliEnPrincipal OWNER = UserFactory.getByUsername("jalien");
 
 	/**
 	 * Entry point
@@ -64,13 +60,16 @@ public class Main {
 	public static void main(String[] args) throws InterruptedException {
 		spoolerProperties = ConfigUtils.getConfiguration("spooler");
 
-        sanityCheckDir(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir)));
+        if (!sanityCheckDir(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
+        	return;
         logger.log(Level.INFO, "Metadata Dir Path: " + spoolerProperties.gets("metadataDir", defaultMetadataDir));
 
-        sanityCheckDir(new File(spoolerProperties.gets("registrationDir", defaultRegistrationDir)));
+        if (!sanityCheckDir(new File(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
+        	return;
         logger.log(Level.INFO, "Registration Dir Path: " + spoolerProperties.gets("registrationDir", defaultRegistrationDir));
 
-        sanityCheckDir(new File(spoolerProperties.gets("errorDir", defaultErrorDir)));
+        if (!sanityCheckDir(new File(spoolerProperties.gets("errorDir", defaultErrorDir))))
+        	return;
         logger.log(Level.INFO, "Error Dir Path: " + spoolerProperties.gets("errorDir", defaultErrorDir));
 
 		logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
@@ -116,17 +115,36 @@ public class Main {
 		}
 	}
 
-	private static void sanityCheckDir(File directory) {
-        if (!directory.exists() || !directory.isDirectory()) {
-            LFNUtils.mkdirs(OWNER, directory.getAbsolutePath());
+	private static boolean sanityCheckDir(File directory) {
+        if (!Files.exists(Paths.get(directory.getAbsolutePath()))) {
+            if (!directory.mkdir()) {
+            	logger.log(Level.WARNING, "Could not create directory " + directory.getAbsolutePath());
+            	return false;
+			}
         }
 
-        if (!directory.canWrite() && !directory.canRead()) {
-            logger.log(Level.WARNING, "Could not read and write on directory: " + directory.getAbsolutePath());
-            directory.setWritable(true);
-            directory.setReadable(true);
+        if (!directory.isDirectory()) {
+			logger.log(Level.WARNING, directory.getAbsolutePath() + " is not a directory");
+			return false;
+		}
+
+        if (!directory.canWrite() && !directory.canRead() && !directory.canExecute()) {
+            logger.log(Level.WARNING, "Could not read, write and execute on directory "
+					+ directory.getAbsolutePath());
+            return false;
         }
-    }
+
+		try {
+			Path tmpFile = Files.createTempFile(Paths.get(directory.getAbsolutePath()), null, null);
+			Files.delete(tmpFile);
+		} catch (IOException e) {
+			logger.log(Level.WARNING, "Could not create/delete file inside the "
+					+ directory.getAbsolutePath() + " directory", e);
+			return false;
+		}
+
+		return true;
+	}
 
     static void moveFile(Logger logger, String src, String dest) {
         try {
