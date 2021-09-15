@@ -64,19 +64,19 @@ public class Main {
 	public static void main(String[] args) throws InterruptedException {
 		spoolerProperties = ConfigUtils.getConfiguration("spooler");
 
-        if (!sanityCheckDir(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
-        	return;
+        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
+            return;
         logger.log(Level.INFO, "Metadata Dir Path: " + spoolerProperties.gets("metadataDir", defaultMetadataDir));
 
-        if (!sanityCheckDir(new File(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
-        	return;
+        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
+            return;
         logger.log(Level.INFO, "Registration Dir Path: " + spoolerProperties.gets("registrationDir", defaultRegistrationDir));
 
-        if (!sanityCheckDir(new File(spoolerProperties.gets("errorDir", defaultErrorDir))))
-        	return;
+        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir))))
+            return;
         logger.log(Level.INFO, "Error Dir Path: " + spoolerProperties.gets("errorDir", defaultErrorDir));
 
-		logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
+        logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
 		logger.log(Level.INFO, "MD5 option: " + spoolerProperties.getb("md5Enable", defaultMd5Enable));
 
 		logger.log(Level.INFO, "Number of Transfer Threads: " + spoolerProperties.geti("queue.default.threads", defaultTransferThreads));
@@ -121,8 +121,21 @@ public class Main {
 		}
 	}
 
-	private static boolean sanityCheckDir(File directory) {
-        if (!Files.exists(Paths.get(directory.getAbsolutePath()))) {
+	private static boolean sanityCheckDir(Path path) {
+	    File directory;
+
+	    if (Files.isSymbolicLink(path)) {
+            try {
+                directory = Files.readSymbolicLink(path).toFile();
+            } catch (IOException e) {
+                logger.log(Level.WARNING, "Caught exception! " + path.toAbsolutePath() + " is a symbolic linnk");
+                return  false;
+            }
+        }
+	    else
+	        directory = path.toFile();
+
+        if (!directory.exists()) {
             if (!directory.mkdir()) {
             	logger.log(Level.WARNING, "Could not create directory " + directory.getAbsolutePath());
             	return false;

@@ -78,6 +78,7 @@ class FileWatcher implements Runnable {
 		catch (IOException | InterruptedException e) {
 			logger.log(Level.WARNING,
 					"Could not create " + (isTransfer ? "transfer_watcher" : "reg_watcher"), e);
+			System.exit(-1);
 		}
 	}
 
@@ -158,7 +159,8 @@ class FileWatcher implements Runnable {
 			run = prop.gets("run", null);
 			LHCPeriod = prop.gets("LHCPeriod", null);
 
-			if (lurl == null || run == null || LHCPeriod == null) {
+			if (lurl == null || run == null || LHCPeriod == null
+                    || lurl.isBlank() || run.isBlank() || LHCPeriod.isBlank()) {
 				logger.log(Level.WARNING, "Missing mandatory attributes");
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path);
@@ -203,26 +205,26 @@ class FileWatcher implements Runnable {
 				writeFile.write("ctime" + ": " + ctime + "\n");
 			}
 
-			if (uuid == null || seioDaemons.isBlank() || !GUIDUtils.isValidGUID(uuid)) {
+			if (uuid == null || uuid.isBlank() || !GUIDUtils.isValidGUID(uuid)) {
 				guid = GUIDUtils.generateTimeUUID();
 				writeFile.write("guid" + ": " + guid + "\n");
 			}
 			else
 				guid = UUID.fromString(uuid);
 
-			if (surl == null || seioDaemons.isBlank()) {
+			if (surl == null || surl.isBlank()) {
 				surl = generateURL("/" + type, LHCPeriod, run,
 						type, lurl.substring(lurl.lastIndexOf('/')), true);
 				writeFile.write("surl" + ": " + surl + "\n");
 			}
 
-			if (curl == null || seioDaemons.isBlank()) {
+			if (curl == null || curl.isBlank()) {
 				curl = generateURL("/alice/cern.ch/user/a/asuiu", LHCPeriod, run,
 						type, lurl.substring(lurl.lastIndexOf('/')), false);
 				writeFile.write("curl" + ": " + curl + "\n");
 			}
 
-			if (seName == null || seioDaemons.isBlank()) {
+			if (seName == null || seName.isBlank()) {
 				seName = Main.spoolerProperties.gets("seName", Main.defaultSEName);
 				writeFile.write("seName" + ": " + seName + "\n");
 			}
