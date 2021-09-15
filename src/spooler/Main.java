@@ -22,10 +22,14 @@ import lazyj.ExtProperties;
 public class Main {
 	static AtomicInteger nrFilesOnSend = new AtomicInteger(0);
 	static AtomicInteger nrFilesOnRegister = new AtomicInteger(0);
-	static AtomicInteger nrFilesSent = new AtomicInteger(0);
-	static AtomicInteger nrFilesRegistered = new AtomicInteger(0);
-	static AtomicInteger nrFilesFailed = new AtomicInteger(0);
-	static AtomicInteger nrFilesRegFailed = new AtomicInteger(0);
+	static AtomicInteger nrDataFilesSent = new AtomicInteger(0);
+    static AtomicInteger nrMetaFilesSent = new AtomicInteger(0);
+	static AtomicInteger nrDataFilesReg = new AtomicInteger(0);
+    static AtomicInteger nrMetaFilesReg = new AtomicInteger(0);
+	static AtomicInteger nrDataFilesFailed = new AtomicInteger(0);
+    static AtomicInteger nrMetaFilesFailed = new AtomicInteger(0);
+	static AtomicInteger nrDataFilesRegFailed = new AtomicInteger(0);
+    static AtomicInteger nrMetaFilesRegFailed = new AtomicInteger(0);
 	static ExtProperties spoolerProperties;
 
 	private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
@@ -80,6 +84,8 @@ public class Main {
 
 		logger.log(Level.INFO, "Storage Element Name: " + spoolerProperties.gets("seName", defaultSEName));
 		logger.log(Level.INFO, "Storage Element seioDaemons: " + spoolerProperties.gets("seioDaemons", defaultseioDaemons));
+
+		ConfigUtils.setApplicationName("epn2eos");
 
 		transferWatcher = new FileWatcher(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir)), true);
 		transferWatcher.watch();

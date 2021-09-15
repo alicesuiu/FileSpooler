@@ -30,14 +30,6 @@ class Spooler implements Runnable {
 		this.toTransfer = toTransfer;
 	}
 
-	private void writeCMetadata() {
-		String destPath = Main.spoolerProperties.gets("registrationDir", Main.defaultRegistrationDir)
-				+ toTransfer.getMetaFilePath().substring(toTransfer.getMetaFilePath().lastIndexOf('/'));
-		String srcPath = toTransfer.getMetaFilePath();
-
-		Main.moveFile(logger, srcPath, destPath);
-	}
-
 	private static boolean checkDataIntegrity(FileElement element, String xxhash) {
 		long metaXXHash;
 		String fileXXHash;
@@ -86,31 +78,52 @@ class Spooler implements Runnable {
 	}
 
 	private static void onSuccess(FileElement element, boolean isMetadata) {
-		Main.nrFilesSent.getAndIncrement();
-		logger.log(Level.INFO, "The " + element.getFile().getName() + " file is successfully sent!");
-		logger.log(Level.INFO, "Total number of files successfully transferred: " + Main.nrFilesSent.get());
-		monitor.incrementCacheHits("transferred_files");
-		monitor.addMeasurement("nr_transmitted_bytes", element.getSize());
+        logger.log(Level.INFO, "Successfully transfered: " + element.getFile().getName());
+        monitor.addMeasurement("nr_transmitted_bytes", element.getSize());
 
-		if (!isMetadata && Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
-				&& (element.getMd5() == null)) {
-			monitor.addMeasurement("md5_file_size", element.getSize());
-			try (Timing t = new Timing(monitor, "md5_execution_time")) {
-				computeMD5(element);
-			}
-		}
+        if (isMetadata) {
+            Main.nrMetaFilesSent.getAndIncrement();
+            logger.log(Level.INFO, "Total number of metadata files successfully transferred: "
+                    + Main.nrMetaFilesSent.get());
+            monitor.incrementCacheHits("metadata_transferred_files");
+        } else {
+            Main.nrDataFilesSent.getAndIncrement();
+            logger.log(Level.INFO, "Total number of data files successfully transferred: "
+                    + Main.nrDataFilesSent.get());
+            monitor.incrementCacheHits("data_transferred_files");
+
+            if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
+                    && (element.getMd5() == null)) {
+                monitor.addMeasurement("md5_file_size", element.getSize());
+                try (Timing t = new Timing(monitor, "md5_execution_time")) {
+                    computeMD5(element);
+                }
+            }
+
+            if (!element.getFile().delete()) {
+                logger.log(Level.WARNING, "Could not delete source file "
+                        + element.getFile().getAbsolutePath());
+            }
+        }
 	}
 
 	private static void onFail(FileElement element, boolean isMetadata) {
-		Main.nrFilesFailed.getAndIncrement();
-		logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
-		logger.log(Level.INFO, "Total number of files whose transmission failed: " + Main.nrFilesFailed.get());
-		monitor.incrementCacheMisses("transferred_files");
+        logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
 
-		if (!isMetadata) {
-			element.computeDelay();
-			Main.transferWatcher.addElement(element);
-		}
+	    if (isMetadata) {
+            Main.nrMetaFilesFailed.getAndIncrement();
+            logger.log(Level.INFO, "Total number of metadata files whose transmission failed: "
+                    + Main.nrMetaFilesFailed.get());
+            monitor.incrementCacheMisses("metadata_transferred_files");
+        }  else {
+            Main.nrDataFilesFailed.getAndIncrement();
+            logger.log(Level.INFO, "Total number of data files whose transmission failed: "
+                    + Main.nrDataFilesFailed.get());
+            monitor.incrementCacheMisses("data_transferred_files");
+
+            element.computeDelay();
+            Main.transferWatcher.addElement(element);
+        }
 	}
 
 	private static boolean transfer(FileElement element, boolean isMetadata) {
@@ -157,12 +170,11 @@ class Spooler implements Runnable {
 
 			transfer(metadataFile, true);
 
-			writeCMetadata();
+            String destPath = Main.spoolerProperties.gets("registrationDir", Main.defaultRegistrationDir)
+                    + toTransfer.getMetaFilePath().substring(toTransfer.getMetaFilePath().lastIndexOf('/'));
+            String srcPath = toTransfer.getMetaFilePath();
 
-			if (!toTransfer.getFile().delete()) {
-				logger.log(Level.WARNING, "Could not delete source file "
-						+ toTransfer.getFile().getAbsolutePath());
-			}
+            Main.moveFile(logger, srcPath, destPath);
 		}
 	}
 

@@ -89,26 +89,38 @@ class Registrator implements Runnable {
 	}
 
 	private static void onSuccess(FileElement element, boolean isMetadata) {
-		Main.nrFilesRegistered.getAndIncrement();
-		logger.log(Level.INFO, "Successfuly registered: " + element.getCurl());
-		logger.log(Level.INFO, "Total number of files successfully registered: "
-				+ Main.nrFilesRegistered.get());
-		monitor.incrementCacheHits("registered_files");
+        logger.log(Level.INFO, "Successfully registered: " + element.getCurl());
+	    if (isMetadata) {
+            Main.nrMetaFilesReg.getAndIncrement();
+            logger.log(Level.INFO, "Total number of metadata files successfully registered: "
+                    + Main.nrMetaFilesReg.get());
+            monitor.incrementCacheHits("metadata_registered_files");
 
-		if (isMetadata) {
-			if (!element.getFile().delete())
-				logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
-		}
+            if (!element.getFile().delete())
+                logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
+        } else {
+            Main.nrDataFilesReg.getAndIncrement();
+            logger.log(Level.INFO, "Total number of data files successfully registered: "
+                    + Main.nrDataFilesReg.get());
+            monitor.incrementCacheHits("data_registered_files");
+        }
 	}
 
-	private static void onFail(FileElement element, String msg, int status) {
-		Main.nrFilesRegFailed.getAndIncrement();
-		logger.log(Level.INFO, String.valueOf(msg));
-		logger.log(Level.INFO, "Total number of files whose registration failed: "
-				+ Main.nrFilesRegFailed.get());
-		monitor.incrementCacheMisses("registered_files");
+	private static void onFail(FileElement element, String msg, int status, boolean isMetadata) {
+	    if (isMetadata) {
+            Main.nrMetaFilesRegFailed.getAndIncrement();
+            logger.log(Level.INFO, "Total number of metadata files whose registration failed: "
+                    + Main.nrMetaFilesRegFailed.get());
+            monitor.incrementCacheMisses("metadata_registered_files");
+        } else{
+            Main.nrDataFilesRegFailed.getAndIncrement();
+            logger.log(Level.INFO, "Total number of data files whose registration failed: "
+                    + Main.nrDataFilesRegFailed.get());
+            monitor.incrementCacheMisses("data_registered_files");
+        }
 
-		if (status == HttpServletResponse.SC_BAD_REQUEST
+        logger.log(Level.INFO, String.valueOf(msg));
+        if (status == HttpServletResponse.SC_BAD_REQUEST
 				|| status == HttpServletResponse.SC_FORBIDDEN
 				|| status == HttpServletResponse.SC_CONFLICT) {
 			String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
@@ -131,7 +143,7 @@ class Registrator implements Runnable {
 			return true;
 		}
 
-		onFail(element, msg, status);
+		onFail(element, msg, status, isMetadata);
 		return false;
 	}
 
