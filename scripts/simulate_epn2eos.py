@@ -21,19 +21,25 @@ def main():
     ]
     sizes = [1048576, 2097152, 3145728] #, 4194304, 5242880]
 
+    totalFiles = 0
+    totalBytes = 0
+
     while True:
         # ./spooler_scripts/generate_files.sh 1 1048576 /data/epn2eos_tool/epn2eos/
-        #nrFiles = random.randint(1, 5)
-        nrFiles = 1
+        nrFiles = random.randint(1, 5)
+        totalFiles += nrFiles
         dataDirIndex = random.randint(0, 4)
         sizeIndex = random.randint(0, 2)
+        totalBytes += sizes[sizeIndex] * nrFiles
 
         print('nrFiles: {}, dataDir: {}, size: {}'.format(str(nrFiles), dataDirs[dataDirIndex], str(sizes[sizeIndex])))
+        print('totalFile: {}'.format(str(totalFiles)))
+        print('totalBytes: {}'.format(str(totalBytes)))
 
         generateFiles = "/home/jalien/spooler_scripts/generate_files.sh " + str(nrFiles) + " " + str(sizes[sizeIndex]) + " " + dataDirs[dataDirIndex]
         os.system(generateFiles)
 
-        # python ./spooler_scripts/generate_metafiles.py /data/epn2eos_tool/data/1 /data/epn2eos_tool/epn2eos/
+        # python ./spooler_scripts/generate_metafiles.py /data/epn2eos_tool/dataDir/1 /data/epn2eos_tool/epn2eos/
         generateMeta = "python /home/jalien/spooler_scripts/generate_metafiles.py " + dataDirs[dataDirIndex] + " " + metadataDir
         os.system(generateMeta)
 

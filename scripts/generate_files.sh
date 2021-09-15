@@ -30,5 +30,5 @@ fi
 for ((i = 0; i < $1; i++)); do
 	filename=file_$(uuidgen)
 	echo $filename
-	dd if=/dev/urandom of=$3/$filename.root bs=$2 count=1024
+	dd if=/dev/urandom of=$3/$filename.root bs=$2 count=1024 status=none
 done
