@@ -26,7 +26,7 @@ class Registrator implements Runnable {
 	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 	private final FileElement toRegister;
 
-    private static final String URL = "http://pcalimonitor.cern.ch:80/epn2eos/daqreg.jsp";
+	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg.jsp";
 
 	Registrator(final FileElement toRegister) {
 		this.toRegister = toRegister;
@@ -56,7 +56,7 @@ class Registrator implements Runnable {
 	}
 
 	private static Pair<Integer, String> sendRequest(FileElement element) {
-		Integer status = -1;
+		int status = -1;
 		String response = "";
 
 		try {
@@ -64,110 +64,111 @@ class Registrator implements Runnable {
 			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 			connection.setRequestMethod("GET");
 			connection.setDoOutput(true);
-			connection.setConnectTimeout(1000 * 60);
+			connection.setConnectTimeout(1000 * 10);
+			connection.setReadTimeout(1000 * 60 * 2);
 
 			String urlParam = getURLParam(element);
 
-			OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream());
-			writer.write(urlParam);
-			writer.flush();
-			writer.close();
+			try (OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream())) {
+				writer.write(urlParam);
+			}
 
 			status = connection.getResponseCode();
 			response = connection.getResponseMessage();
 
-			logger.log(Level.INFO, "status code HTTP: " + status);
+			logger.log(Level.FINE, "status code HTTP: " + status);
 
 			connection.disconnect();
 		}
 		catch (IOException e) {
 			logger.log(Level.WARNING, "Communication error", e);
 			status = HttpServletResponse.SC_SERVICE_UNAVAILABLE;
+		}
+
+		return new Pair<>(Integer.valueOf(status), response);
+	}
+
+	private static void onSuccess(FileElement element, boolean isMetadata) {
+		Main.nrFilesRegistered.getAndIncrement();
+		logger.log(Level.INFO, "Successfuly registered: " + element.getCurl());
+		logger.log(Level.INFO, "Total number of files successfully registered: "
+				+ Main.nrFilesRegistered.get());
+		monitor.incrementCacheHits("registered_files");
+
+		if (isMetadata) {
+			if (!element.getFile().delete())
+				logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
+		}
+	}
+
+	private static void onFail(FileElement element, String msg, int status) {
+		Main.nrFilesRegFailed.getAndIncrement();
+		logger.log(Level.INFO, String.valueOf(msg));
+		logger.log(Level.INFO, "Total number of files whose registration failed: "
+				+ Main.nrFilesRegFailed.get());
+		monitor.incrementCacheMisses("registered_files");
+
+		if (status == HttpServletResponse.SC_BAD_REQUEST
+				|| status == HttpServletResponse.SC_FORBIDDEN
+				|| status == HttpServletResponse.SC_CONFLICT) {
+			String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
+					+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
+			Main.moveFile(logger, element.getMetaFilePath(), path);
+		}
+		else {
 			element.computeDelay();
 			Main.registrationWatcher.addElement(element);
 		}
-
-		return new Pair<>(status, response);
 	}
 
-    private void onSuccess(FileElement element, boolean isMetadata) {
-	    Main.nrFilesRegistered.getAndIncrement();
-        logger.log(Level.INFO, "Successfuly registered: " + element.getCurl());
-        logger.log(Level.INFO, "Total number of files successfully registered: "
-                + Main.nrFilesRegistered.get());
-        monitor.incrementCacheHits("registered_files");
+	private static boolean register(FileElement element, boolean isMetadata) {
+		Pair<Integer, String> response = sendRequest(element);
+		int status = response.getFirst().intValue();
+		String msg = response.getSecond();
 
-        if (isMetadata) {
-            if (!element.getFile().delete())
-                logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
-        }
-    }
+		if (status == HttpServletResponse.SC_OK || status == HttpServletResponse.SC_CREATED) {
+			onSuccess(element, isMetadata);
+			return true;
+		}
 
-    private void onFail(FileElement element, boolean isMetadata, String msg, Integer status) {
-        Main.nrFilesRegFailed.getAndIncrement();
-        logger.log(Level.INFO, String.valueOf(msg));
-        logger.log(Level.INFO, "Total number of files whose registration failed: "
-                + Main.nrFilesRegFailed.get());
-        monitor.incrementCacheMisses("registered_files");
-
-        if (!isMetadata) {
-            if (status == HttpServletResponse.SC_BAD_REQUEST
-                    || status == HttpServletResponse.SC_FORBIDDEN
-                    || status == HttpServletResponse.SC_CONFLICT) {
-                String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
-                        + element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
-                Main.moveFile(logger, element.getMetaFilePath(), path);
-            } else {
-                element.computeDelay();
-                Main.registrationWatcher.addElement(element);
-            }
-        }
-    }
-
-	private boolean register(FileElement element, boolean isMetadata) {
-        Pair<Integer, String> response = sendRequest(element);
-        Integer status = response.getFirst();
-        String msg = response.getSecond();
-
-        if (status == HttpServletResponse.SC_OK || status == HttpServletResponse.SC_CREATED) {
-            onSuccess(element, isMetadata);
-            return true;
-        }
-
-        onFail(element, isMetadata, msg, status);
-        return false;
-    }
+		onFail(element, msg, status);
+		return false;
+	}
 
 	private void registerFile() {
-	    boolean status = register(toRegister, false);
+		boolean status = register(toRegister, false);
 
-        if (status) {
-            FileElement metadataFile = new FileElement(
-                    null,
-                    toRegister.getSurl().concat(".meta"),
-                    new File(toRegister.getMetaFilePath()).length(),
-                    toRegister.getRun(),
-                    GUIDUtils.generateTimeUUID(),
-                    new File(toRegister.getMetaFilePath()).lastModified(),
-                    toRegister.getLHCPeriod(),
-                    null,
-                    0,
-                    toRegister.getMetaFilePath(),
-                    toRegister.getType(),
-                    toRegister.getCurl().concat(".meta"),
-                    toRegister.getSeName(),
-                    toRegister.getSeioDaemons(),
-                    null) ;
-            register(metadataFile, true);
-        }
+		if (status) {
+			FileElement metadataFile = new FileElement(
+					null,
+					toRegister.getSurl().concat(".meta"),
+					new File(toRegister.getMetaFilePath()).length(),
+					toRegister.getRun(),
+					GUIDUtils.generateTimeUUID(),
+					new File(toRegister.getMetaFilePath()).lastModified(),
+					toRegister.getLHCPeriod(),
+					null,
+					0,
+					toRegister.getMetaFilePath(),
+					toRegister.getType(),
+					toRegister.getCurl().concat(".meta"),
+					toRegister.getSeName(),
+					toRegister.getSeioDaemons(),
+					null);
+			register(metadataFile, true);
+		}
 	}
 
 	@Override
 	public void run() {
-        logger.log(Level.INFO, "Total number of files registered in parallel: "
-                + Main.nrFilesOnRegister.incrementAndGet());
+		logger.log(Level.INFO, "Total number of files registered in parallel: "
+				+ Main.nrFilesOnRegister.incrementAndGet());
 
-        registerFile();
-        Main.nrFilesOnRegister.decrementAndGet();
+		try {
+			registerFile();
+		}
+		finally {
+			Main.nrFilesOnRegister.decrementAndGet();
+		}
 	}
 }

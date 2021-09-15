@@ -4,23 +4,19 @@
 <%@ page import="alien.config.ConfigUtils"%>
 <%@ page import="java.util.logging.Level"%>
 <%@ page import="lazyj.commands.CommandOutput"%>
-<%!
-    private static final Object lock = new Object();
+<%!private static final Object lock = new Object();
 	private static final Logger logger = ConfigUtils.getLogger("daqreg");
 	private static final AliEnPrincipal OWNER = UserFactory.getByUsername("asuiu");
 
 	private static final ExpirationCache<String, String> mkDirsHistory = new ExpirationCache<>(1000);%>
 <%
-/*String clientAddr = request.getRemoteAddr();
+String clientAddr = request.getRemoteAddr();
 
-if (!clientAddr.equals("137.138.116.104") && !clientAddr.equals("2001:1458:201:b4b9::100:50") &&	// aldaqgw01-gpn03.cern.ch
-!clientAddr.equals("137.138.116.101") // aldaqgw02-gpn03.cern.ch
-&& !clientAddr.startsWith("10.161.34.")
-) {
-    lia.web.servlets.web.Utils.logRequest("/work/daqreg.jsp?DENIED=" + clientAddr, 0, request);
-    out.println("err:access denied to "+clientAddr);
-    return;
-}*/
+if (!clientAddr.startsWith("10.161.34.")) {
+	lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?DENIED=" + clientAddr, 0, request);
+	response.sendError(HttpServletResponse.SC_FORBIDDEN, "Client not authorized");
+	return;
+}
 
 response.setContentType("text/plain");
 
@@ -65,15 +61,15 @@ if (idx > 0) {
 
 	if (mkDirsHistory.get(sPartitionDir) == null) {
 		synchronized (lock) {
-            if (LFNUtils.mkdirs(OWNER, sPartitionDir) == null) {
-                logger.log(Level.WARNING, "Cannot create directory: " + sPartitionDir);
-                response.sendError(HttpServletResponse.SC_FORBIDDEN, "Cannot create directory: " + sPartitionDir);
-                return;
-            }
+	if (LFNUtils.mkdirs(OWNER, sPartitionDir) == null) {
+		logger.log(Level.WARNING, "Cannot create directory: " + sPartitionDir);
+		response.sendError(HttpServletResponse.SC_FORBIDDEN, "Cannot create directory: " + sPartitionDir);
+		return;
+	}
 
-            /* final CommandOutput co = AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
-                alien.catalogue.CatalogueUtils.invalidateIndexTableCache();
-                logger.log(Level.INFO, "daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);*/
+	/* final CommandOutput co = AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
+	    alien.catalogue.CatalogueUtils.invalidateIndexTableCache();
+	    logger.log(Level.INFO, "daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);*/
 		}
 		mkDirsHistory.put(sPartitionDir, sPartitionDir, 1000 * 60 * 10);
 	}
@@ -86,27 +82,31 @@ if (existing != null) {
 
 	if (existing.size != size)
 		response.sendError(HttpServletResponse.SC_CONFLICT, "File " + curl
-                + " already exists in the catalogue with a different size (" + existing.size + " vs " + size + ")");
+		+ " already exists in the catalogue with a different size (" + existing.size + " vs " + size + ")");
 	else
 		response.setStatus(HttpServletResponse.SC_OK);
-} else {
+}
+else {
 	boolean done = false;
 	try {
 		synchronized (lock) {
 			done = Register.register(curl, pfn, guid, md5, size, seName, OWNER);
 		}
-	} catch (Throwable t) {
+	}
+	catch (Throwable t) {
 		logger.log(Level.WARNING, "Caught exception", t);
 		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Caught exception : "
-                + t + " (" + t.getMessage() + ")");
+		+ t + " (" + t.getMessage() + ")");
 	}
 
 	if (!done) {
 		logger.log(Level.INFO, "Registering failed for:\n" + msg);
 		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Registering by JAPI failed for:\n" + msg);
-	} else {
+	}
+	else {
 		logger.log(Level.INFO, "Successfuly registered for:\n" + msg);
 		response.setStatus(HttpServletResponse.SC_CREATED);
 	}
 }
+lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?lfn=" + curl + "&pfn=" + pfn + "&size=" + size, response.getStatus(), request);
 %>
