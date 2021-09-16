@@ -17,6 +17,7 @@ if (
     !clientAddr.equals("128.141.19.252")		// alihlt-gw-prod.cern.ch
 ) {
 	lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?DENIED=" + clientAddr, 0, request);
+	logger.log(Level.WARNING, "Client not authorized");
 	response.sendError(HttpServletResponse.SC_FORBIDDEN, "Client not authorized");
 	return;
 }
@@ -64,15 +65,15 @@ if (idx > 0) {
 
 	if (mkDirsHistory.get(sPartitionDir) == null) {
 		synchronized (lock) {
-	if (LFNUtils.mkdirs(OWNER, sPartitionDir) == null) {
-		logger.log(Level.WARNING, "Cannot create directory: " + sPartitionDir);
-		response.sendError(HttpServletResponse.SC_FORBIDDEN, "Cannot create directory: " + sPartitionDir);
-		return;
-	}
+			if (LFNUtils.mkdirs(OWNER, sPartitionDir) == null) {
+				logger.log(Level.WARNING, "Cannot create directory: " + sPartitionDir);
+				response.sendError(HttpServletResponse.SC_FORBIDDEN, "Cannot create directory: " + sPartitionDir);
+				return;
+			}
 
-	/* final CommandOutput co = alien.pool.AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
-	    alien.catalogue.CatalogueUtils.invalidateIndexTableCache();
-	    logger.log(Level.INFO, "daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);*/
+			final CommandOutput co = alien.pool.AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
+			alien.catalogue.CatalogueUtils.invalidateIndexTableCache();
+			logger.log(Level.INFO, "daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);
 		}
 		mkDirsHistory.put(sPartitionDir, sPartitionDir, 1000 * 60 * 10);
 	}
