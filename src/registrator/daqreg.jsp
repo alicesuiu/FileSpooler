@@ -12,7 +12,10 @@
 <%
 String clientAddr = request.getRemoteAddr();
 
-if (!clientAddr.startsWith("10.161.34.")) {
+if (
+    !clientAddr.startsWith("10.162.36.") && 		// EPN IB interfaces
+    !clientAddr.equals("128.141.19.252")		// alihlt-gw-prod.cern.ch
+) {
 	lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?DENIED=" + clientAddr, 0, request);
 	response.sendError(HttpServletResponse.SC_FORBIDDEN, "Client not authorized");
 	return;
@@ -67,7 +70,7 @@ if (idx > 0) {
 		return;
 	}
 
-	/* final CommandOutput co = AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
+	/* final CommandOutput co = alien.pool.AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
 	    alien.catalogue.CatalogueUtils.invalidateIndexTableCache();
 	    logger.log(Level.INFO, "daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);*/
 		}
