@@ -62,7 +62,7 @@ public class Main {
 	 * @throws InterruptedException
 	 */
 	public static void main(String[] args) throws InterruptedException {
-		spoolerProperties = ConfigUtils.getConfiguration("spooler");
+		spoolerProperties = ConfigUtils.getConfiguration("epn2eos");
 
         if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
             return;
