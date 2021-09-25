@@ -181,7 +181,7 @@ class FileWatcher implements Runnable {
 			seioDaemons = prop.gets("seioDaemons", null);
 			priority = prop.gets("priority", null);
 
-			if (type == null || seioDaemons.isBlank()) {
+			if (type == null || type.isBlank()) {
 				type = "raw";
 				writeFile.write("type" + ": " + type + "\n");
 			}

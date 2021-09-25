@@ -1,0 +1,19 @@
+[Unit]
+Description=EPN2EOS data transfer system
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+SuccessExitStatus=143
+User=jalien
+Group=epn
+WorkingDirectory=/home/jalien
+Environment="XrdSecPROTOCOL=sss,unix"
+Environment="XrdSecSSSKT=/home/jalien/eos.keys/.aliepn2eosvs.sss.keys"
+ExecStart=/etc/alternatives/jre_16/bin/java -Xms1G -Xmx1G -cp /home/jalien/alien-cs.jar:/home/jalien/spooler.jar -DAliEnConfig=/home/jalien/.alien/config spooler.Main
+ExecStop=/bin/kill -15 $MAINPID
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
