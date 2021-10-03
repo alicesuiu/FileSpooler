@@ -128,17 +128,15 @@ class FileWatcher implements Runnable {
 	}
 
 	private static String generateURL(String prefix, String period,
-			String run, String type, String filename, boolean isPFN) {
+			String run, String type, String filename) {
 
 		String url = "";
 
 		url += prefix + "/";
 		url += (new Date().getYear() + 1900) + "/";
 		url += period + "/";
-		url += run;
-
-		if (!isPFN)
-			url += "/" + type;
+		url += run + "/";
+		url += type;
 
 		url += filename;
 
@@ -214,13 +212,13 @@ class FileWatcher implements Runnable {
 
 			if (surl == null || surl.isBlank()) {
 				surl = generateURL("/" + type, LHCPeriod, run,
-						type, lurl.substring(lurl.lastIndexOf('/')), true);
+						type, lurl.substring(lurl.lastIndexOf('/')));
 				writeFile.write("surl" + ": " + surl + "\n");
 			}
 
 			if (curl == null || curl.isBlank()) {
 				curl = generateURL("/alice/cern.ch/user/a/asuiu", LHCPeriod, run,
-						type, lurl.substring(lurl.lastIndexOf('/')), false);
+						type, lurl.substring(lurl.lastIndexOf('/')));
 				writeFile.write("curl" + ": " + curl + "\n");
 			}
 

@@ -153,7 +153,7 @@ class Registrator implements Runnable {
 		if (status) {
 			FileElement metadataFile = new FileElement(
 					null,
-					toRegister.getSurl().concat(".meta"),
+					toRegister.getMetaSurl(),
 					new File(toRegister.getMetaFilePath()).length(),
 					toRegister.getRun(),
 					GUIDUtils.generateTimeUUID(),
@@ -163,7 +163,7 @@ class Registrator implements Runnable {
 					0,
 					toRegister.getMetaFilePath(),
 					toRegister.getType(),
-					toRegister.getCurl().concat(".meta"),
+					toRegister.getMetaCurl(),
 					toRegister.getSeName(),
 					toRegister.getSeioDaemons(),
 					null);

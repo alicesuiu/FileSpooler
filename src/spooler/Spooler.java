@@ -3,6 +3,7 @@ package spooler;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.text.DecimalFormat;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -16,6 +17,7 @@ import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
 import alien.se.SE;
+import lazyj.Format;
 
 /**
  * @author asuiu
@@ -49,7 +51,7 @@ class Spooler implements Runnable {
 			}
 			catch (IOException e) {
 				logger.log(Level.WARNING, "Could not compute xxhash for "
-						+ element.getFile().getAbsolutePath(), e);
+						+ element.getFile().getAbsolutePath(), e.getMessage());
 			}
 		}
 
@@ -60,26 +62,41 @@ class Spooler implements Runnable {
 		return fileXXHash.equals(xxhash);
 	}
 
-	private static void computeMD5(FileElement element) {
-		try (FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
+	private static void computeMD5(FileElement element, boolean isMetadata) {
+		try {
 			String md5Checksum;
-
 			md5Checksum = IOUtils.getMD5(element.getFile());
 			element.setMd5(md5Checksum);
-			writeFile.write("md5" + ": " + element.getMd5() + "\n");
-
-			logger.log(Level.INFO, "MD5 checksum for the file " + element.getFile().getName()
+			logger.log(Level.INFO, "MD5 checksum for the file " + element.getSurl()
 					+ " is " + element.getMd5());
-		}
-		catch (IOException e) {
+
+			if (!isMetadata) {
+				try (FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
+					writeFile.write("md5" + ": " + element.getMd5() + "\n");
+				}
+			}
+		} catch (IOException e) {
 			logger.log(Level.WARNING, "Could not compute md5 for "
-					+ element.getFile().getAbsolutePath(), e);
+					+ element.getFile().getAbsolutePath(), e.getMessage());
 		}
 	}
 
-	private static void onSuccess(FileElement element, boolean isMetadata) {
-        logger.log(Level.INFO, "Successfully transfered: " + element.getFile().getName());
+	private static void onSuccess(FileElement element, boolean isMetadata, double transfer_time) {
+		DecimalFormat formatter = new DecimalFormat("#.##");
+        logger.log(Level.INFO, "Successfully transfered: "
+						+ element.getSurl()
+						+ " of size " + Format.size(element.getSize())
+						+ " with rate " + Format.size(element.getSize() / transfer_time) + "/s"
+						+ " in " + formatter.format(transfer_time) + "s");
         monitor.addMeasurement("nr_transmitted_bytes", element.getSize());
+
+		if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
+				&& (element.getMd5() == null)) {
+			monitor.addMeasurement("md5_file_size", element.getSize());
+			try (Timing t = new Timing(monitor, "md5_execution_time")) {
+				computeMD5(element, isMetadata);
+			}
+		}
 
         if (isMetadata) {
             Main.nrMetaFilesSent.getAndIncrement();
@@ -92,14 +109,6 @@ class Spooler implements Runnable {
                     + Main.nrDataFilesSent.get());
             monitor.incrementCacheHits("data_transferred_files");
 
-            if (Main.spoolerProperties.getb("md5Enable", Main.defaultMd5Enable)
-                    && (element.getMd5() == null)) {
-                monitor.addMeasurement("md5_file_size", element.getSize());
-                try (Timing t = new Timing(monitor, "md5_execution_time")) {
-                    computeMD5(element);
-                }
-            }
-
             if (!element.getFile().delete()) {
                 logger.log(Level.WARNING, "Could not delete source file "
                         + element.getFile().getAbsolutePath());
@@ -108,8 +117,6 @@ class Spooler implements Runnable {
 	}
 
 	private static void onFail(FileElement element, boolean isMetadata) {
-        logger.log(Level.WARNING, "Transmission of the " + element.getFile().getName() + " file failed!");
-
 	    if (isMetadata) {
             Main.nrMetaFilesFailed.getAndIncrement();
             logger.log(Level.INFO, "Total number of metadata files whose transmission failed: "
@@ -132,15 +139,26 @@ class Spooler implements Runnable {
 			GUID guid = new GUID(element.getGuid());
 			guid.size = element.getSize();
 			PFN pfn = new PFN(element.getSeioDaemons() + "/" + element.getSurl(), guid, se);
+			double transfer_time = 0;
 
-			new Xrootd().put(pfn, element.getFile(), false);
+			try (Timing t = new Timing(monitor, "transfer_execution_time")) {
+				new Xrootd().put(pfn, element.getFile(), false);
+				transfer_time = t.getSeconds();
+			}
 
-			onSuccess(element, isMetadata);
+			onSuccess(element, isMetadata, transfer_time);
 			return true;
 		}
 		catch (IOException e) {
-			logger.log(Level.WARNING, "Transfer failed with exception", e);
-			onFail(element, isMetadata);
+			logger.log(Level.WARNING, "Transfer failed with exception for file: " + element.getSurl()
+					+ "\n" + e.getMessage());
+			if (e.getMessage().contains("Unable to overwrite existing file - you are write-once user ; " +
+					"File exists (destination)")) {
+				String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
+						+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
+				Main.moveFile(logger, element.getMetaFilePath(), path);
+			} else
+				onFail(element, isMetadata);
 		}
 
 		return false;
@@ -153,7 +171,7 @@ class Spooler implements Runnable {
 		if (status) {
 			FileElement metadataFile = new FileElement(
 					null,
-					toTransfer.getSurl().concat(".meta"),
+					toTransfer.getMetaSurl(),
 					new File(toTransfer.getMetaFilePath()).length(),
 					toTransfer.getRun(),
 					GUIDUtils.generateTimeUUID(),
@@ -163,7 +181,7 @@ class Spooler implements Runnable {
 					0,
 					toTransfer.getMetaFilePath(),
 					toTransfer.getType(),
-					toTransfer.getCurl().concat(".meta"),
+					toTransfer.getMetaCurl(),
 					toTransfer.getSeName(),
 					toTransfer.getSeioDaemons(),
 					null);

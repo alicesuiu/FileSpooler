@@ -135,7 +135,7 @@ class FileElement implements Delayed {
 
     @Override
     public String toString() {
-        String sb = "FileElement{" + "file=" + file +
+        String sb = "FileElement{" + "lurl=" + file.getAbsolutePath() +
                 ", nrTries=" + nrTries +
                 ", time=" + time +
                 ", md5='" + md5 + '\'' +
@@ -178,5 +178,17 @@ class FileElement implements Delayed {
         logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
         time = System.currentTimeMillis() + delayTime * 1000;
         logger.log(Level.INFO, "The transmission time of the file is: " + time);
+    }
+
+    String getMetaSurl() {
+        StringBuilder metaSurl = new StringBuilder(surl.concat(".meta"));
+        int index = surl.lastIndexOf(type);
+        metaSurl.replace(index, type.length() + index, type + "_metadata");
+
+        return metaSurl.toString();
+    }
+
+    String getMetaCurl() {
+        return curl.concat(".meta").replace(type, type + "_metadata");
     }
 }
