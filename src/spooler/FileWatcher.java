@@ -77,7 +77,7 @@ class FileWatcher implements Runnable {
 		}
 		catch (IOException | InterruptedException e) {
 			logger.log(Level.WARNING,
-					"Could not create " + (isTransfer ? "transfer_watcher" : "reg_watcher"), e);
+					"Could not create " + (isTransfer ? "transfer_watcher" : "reg_watcher"), e.getMessage());
 			System.exit(-1);
 		}
 	}
@@ -159,7 +159,7 @@ class FileWatcher implements Runnable {
 
 			if (lurl == null || run == null || LHCPeriod == null
                     || lurl.isBlank() || run.isBlank() || LHCPeriod.isBlank()) {
-				logger.log(Level.WARNING, "Missing mandatory attributes");
+				logger.log(Level.WARNING, "Missing mandatory attributes in file: " + file.getAbsolutePath());
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path);
 				return null;

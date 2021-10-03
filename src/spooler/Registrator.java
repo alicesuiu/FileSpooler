@@ -76,12 +76,10 @@ class Registrator implements Runnable {
 			status = connection.getResponseCode();
 			response = connection.getResponseMessage();
 
-			logger.log(Level.FINE, "status code HTTP: " + status);
-
 			connection.disconnect();
 		}
 		catch (IOException e) {
-			logger.log(Level.WARNING, "Communication error", e);
+			logger.log(Level.WARNING, "Communication error", e.getMessage());
 			status = HttpServletResponse.SC_SERVICE_UNAVAILABLE;
 		}
 
@@ -119,7 +117,8 @@ class Registrator implements Runnable {
             monitor.incrementCacheMisses("data_registered_files");
         }
 
-        logger.log(Level.INFO, String.valueOf(msg));
+        logger.log(Level.INFO, "Failed registration for: " + element.getFile().getAbsolutePath()
+				+ ".\nMessage: " + msg + "\nStatus Code: " + status);
         if (status == HttpServletResponse.SC_BAD_REQUEST
 				|| status == HttpServletResponse.SC_FORBIDDEN
 				|| status == HttpServletResponse.SC_CONFLICT) {

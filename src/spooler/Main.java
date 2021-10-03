@@ -42,9 +42,10 @@ public class Main {
     /**
      * Default Constants
      */
-	private static final String defaultMetadataDir = System.getProperty("user.home") + "/epn2eos";
-	static final String defaultRegistrationDir = System.getProperty("user.home") + "/daqSpool";
-	static final String defaultErrorDir = System.getProperty("user.home") + "/error";
+	private static final String defaultMetadataDir = "/data/epn2eos_tool/epn2eos";
+	static final String defaultRegistrationDir = "/data/epn2eos_tool/daqSpool";
+	static final String defaultErrorDir = "/data/epn2eos_tool/error";
+	static final String defaultLogsDir = "/data/epn2eos_tool/logs";
 	static final String defaultSEName = "ALICE::CERN::EOSALICEO2";
 	static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
 	static final boolean defaultMd5Enable = false;
@@ -121,14 +122,14 @@ public class Main {
 		}
 	}
 
-	private static boolean sanityCheckDir(Path path) {
+	static boolean sanityCheckDir(Path path) {
 	    File directory;
 
 	    if (Files.isSymbolicLink(path)) {
             try {
                 directory = Files.readSymbolicLink(path).toFile();
             } catch (IOException e) {
-                logger.log(Level.WARNING, "Caught exception! " + path.toAbsolutePath() + " is a symbolic linnk");
+                logger.log(Level.WARNING, "Caught exception! " + path.toAbsolutePath() + " is a symbolic link");
                 return  false;
             }
         }
@@ -158,7 +159,7 @@ public class Main {
 			Files.delete(tmpFile);
 		} catch (IOException e) {
 			logger.log(Level.WARNING, "Could not create/delete file inside the "
-					+ directory.getAbsolutePath() + " directory", e);
+					+ directory.getAbsolutePath() + " directory", e.getMessage());
 			return false;
 		}
 
@@ -169,7 +170,7 @@ public class Main {
         try {
             Files.move(Paths.get(src), Paths.get(dest), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            logger.log(Level.WARNING, "Could not move metadata file: " + src, e);
+            logger.log(Level.WARNING, "Could not move metadata file: " + src, e.getMessage());
         }
     }
 }
