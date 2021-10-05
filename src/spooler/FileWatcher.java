@@ -217,7 +217,7 @@ class FileWatcher implements Runnable {
 			}
 
 			if (curl == null || curl.isBlank()) {
-				curl = generateURL("/alice/cern.ch/user/a/asuiu", LHCPeriod, run,
+				curl = generateURL("/alice/data", LHCPeriod, run,
 						type, lurl.substring(lurl.lastIndexOf('/')));
 				writeFile.write("curl" + ": " + curl + "\n");
 			}
