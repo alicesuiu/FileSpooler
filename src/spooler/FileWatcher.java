@@ -237,14 +237,14 @@ class FileWatcher implements Runnable {
 				writeFile.write("priority" + ": " + priority + "\n");
 			}
 		} catch (IOException e) {
-			logger.log(Level.WARNING, "Could not read/write the metadata file " + file.getAbsolutePath(), e);
+			logger.log(Level.WARNING, "Could not read/write the metadata file " + file.getAbsolutePath(), e.getMessage());
 			path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 			Main.moveFile(logger, file.getAbsolutePath(), path);
 			return null;
 		}
 
 		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
-				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons, priority);
+				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons, priority, false);
 	}
 
 }

@@ -1,8 +1,11 @@
 package spooler;
 
 import alien.config.ConfigUtils;
+import alien.io.IOUtils;
 
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
@@ -31,13 +34,14 @@ class FileElement implements Delayed {
     private final String seName;
     private final String seioDaemons;
     private final String priority;
+    private final boolean isMetadata;
 
     private static final Logger logger = ConfigUtils.getLogger(FileElement.class.getCanonicalName());
 
     FileElement(String md5, String surl, long size, String run,
                 UUID guid, long ctime, String LHCPeriod, String metaFilePath,
                 long xxhash, String lurl, String type, String curl, String seName,
-                String seioDaemons, String priority) {
+                String seioDaemons, String priority, boolean isMetadata) {
         this.md5 = md5;
         this.surl = surl;
         this.curl = curl;
@@ -52,6 +56,7 @@ class FileElement implements Delayed {
         this.seName = seName;
         this.seioDaemons = seioDaemons;
         this.priority = priority;
+        this.isMetadata = isMetadata;
         nrTries = 0;
         time = System.currentTimeMillis();
         file = new File(lurl);
@@ -125,6 +130,10 @@ class FileElement implements Delayed {
         return priority;
     }
 
+    boolean isMetadata() {
+        return isMetadata;
+    }
+
     void setXXHash(long xxhash) {
         this.xxhash = xxhash;
     }
@@ -178,6 +187,25 @@ class FileElement implements Delayed {
         logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
         time = System.currentTimeMillis() + delayTime * 1000;
         logger.log(Level.INFO, "The transmission time of the file is: " + time);
+    }
+
+    void computeMD5() {
+        try {
+            String md5Checksum;
+            md5Checksum = IOUtils.getMD5(file);
+            md5 = md5Checksum;
+            logger.log(Level.INFO, "MD5 checksum for the file " + surl
+                    + " is " + md5);
+
+            if (!isMetadata) {
+                try (FileWriter writeFile = new FileWriter(metaFilePath, true)) {
+                    writeFile.write("md5" + ": " + md5 + "\n");
+                }
+            }
+        } catch (IOException e) {
+            logger.log(Level.WARNING, "Could not compute md5 for "
+                    + file.getAbsolutePath(), e.getMessage());
+        }
     }
 
     String getMetaSurl() {

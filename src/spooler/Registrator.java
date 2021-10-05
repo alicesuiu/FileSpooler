@@ -86,9 +86,9 @@ class Registrator implements Runnable {
 		return new Pair<>(Integer.valueOf(status), response);
 	}
 
-	private static void onSuccess(FileElement element, boolean isMetadata) {
+	private static void onSuccess(FileElement element) {
         logger.log(Level.INFO, "Successfully registered: " + element.getCurl());
-	    if (isMetadata) {
+	    if (element.isMetadata()) {
             Main.nrMetaFilesReg.getAndIncrement();
             logger.log(Level.INFO, "Total number of metadata files successfully registered: "
                     + Main.nrMetaFilesReg.get());
@@ -104,8 +104,8 @@ class Registrator implements Runnable {
         }
 	}
 
-	private static void onFail(FileElement element, String msg, int status, boolean isMetadata) {
-	    if (isMetadata) {
+	private static void onFail(FileElement element, String msg, int status) {
+	    if (element.isMetadata()) {
             Main.nrMetaFilesRegFailed.getAndIncrement();
             logger.log(Level.INFO, "Total number of metadata files whose registration failed: "
                     + Main.nrMetaFilesRegFailed.get());
@@ -132,22 +132,22 @@ class Registrator implements Runnable {
 		}
 	}
 
-	private static boolean register(FileElement element, boolean isMetadata) {
+	private static boolean register(FileElement element) {
 		Pair<Integer, String> response = sendRequest(element);
 		int status = response.getFirst().intValue();
 		String msg = response.getSecond();
 
 		if (status == HttpServletResponse.SC_OK || status == HttpServletResponse.SC_CREATED) {
-			onSuccess(element, isMetadata);
+			onSuccess(element);
 			return true;
 		}
 
-		onFail(element, msg, status, isMetadata);
+		onFail(element, msg, status);
 		return false;
 	}
 
 	private void registerFile() {
-		boolean status = register(toRegister, false);
+		boolean status = register(toRegister);
 
 		if (status) {
 			FileElement metadataFile = new FileElement(
@@ -165,8 +165,10 @@ class Registrator implements Runnable {
 					toRegister.getMetaCurl(),
 					toRegister.getSeName(),
 					toRegister.getSeioDaemons(),
-					null);
-			register(metadataFile, true);
+					null,
+					true);
+			metadataFile.computeMD5();
+			register(metadataFile);
 		}
 	}
 
