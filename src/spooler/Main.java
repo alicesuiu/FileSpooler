@@ -30,6 +30,7 @@ public class Main {
     static AtomicInteger nrMetaFilesFailed = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesRegFailed = new AtomicInteger(0);
     static AtomicInteger nrMetaFilesRegFailed = new AtomicInteger(0);
+
 	static ExtProperties spoolerProperties;
 
 	private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
@@ -116,6 +117,16 @@ public class Main {
 			names.add("registration_slots");
 			values.add(Integer.valueOf(registrationWatcher.executors.values().stream().mapToInt((s) -> s.getPoolSize()).sum()));
 		});
+
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			transferWatcher.setShouldRun(false);
+			transferWatcher.shutdown();
+
+			registrationWatcher.setShouldRun(false);
+			registrationWatcher.shutdown();
+
+			logger.log(Level.WARNING, "The epn2eos tool is shutting down");
+		}));
 
 		while (true) {
 			Thread.sleep(1000L * 60);

@@ -38,10 +38,12 @@ class FileWatcher implements Runnable {
 	private final File directory;
 	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
 	private final boolean isTransfer;
+	private boolean shouldRun;
 
 	FileWatcher(File directory, boolean isTransfer) {
 		this.directory = directory;
 		this.isTransfer = isTransfer;
+		shouldRun = true;
 	}
 
 	@Override
@@ -54,6 +56,10 @@ class FileWatcher implements Runnable {
 
 			WatchKey key;
 			while ((key = watchService.take()) != null) {
+
+				if (!shouldRun)
+					break;
+
 				for (WatchEvent<?> event : key.pollEvents()) {
 					Path filePath = Paths.get(directory.getAbsolutePath() + "/" + event.context());
 					File file = filePath.toFile();
@@ -72,6 +78,7 @@ class FileWatcher implements Runnable {
 								+ (isTransfer ? "transfer_watcher" : "reg_watcher"));
 					}
 				}
+
 				key.reset();
 			}
 		}
@@ -88,6 +95,19 @@ class FileWatcher implements Runnable {
 			thread.setDaemon(true);
 			thread.start();
 			thread.setName("Watcher Thread for " + directory.getAbsolutePath() + " directory");
+		}
+	}
+
+	void shutdown() {
+		for (Map.Entry<String, ScheduledThreadPoolExecutor> entry : executors.entrySet()) {
+			ScheduledThreadPoolExecutor executor = entry.getValue();
+			executor.shutdown();
+			try {
+				executor.awaitTermination(30, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				logger.log(Level.WARNING,
+						"Caught interrupted exception while trying to shutdown an executor", e.getMessage());
+			}
 		}
 	}
 
@@ -247,4 +267,7 @@ class FileWatcher implements Runnable {
 				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons, priority, false);
 	}
 
+	 void setShouldRun(boolean shouldRun) {
+		this.shouldRun = shouldRun;
+	}
 }
