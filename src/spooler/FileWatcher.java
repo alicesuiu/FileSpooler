@@ -38,12 +38,10 @@ class FileWatcher implements Runnable {
 	private final File directory;
 	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
 	private final boolean isTransfer;
-	private boolean shouldRun;
 
 	FileWatcher(File directory, boolean isTransfer) {
 		this.directory = directory;
 		this.isTransfer = isTransfer;
-		shouldRun = true;
 	}
 
 	@Override
@@ -55,11 +53,7 @@ class FileWatcher implements Runnable {
 			path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
 
 			WatchKey key;
-			while ((key = watchService.take()) != null) {
-
-				if (!shouldRun)
-					break;
-
+			while (Main.shouldRun && (key = watchService.take()) != null) {
 				for (WatchEvent<?> event : key.pollEvents()) {
 					Path filePath = Paths.get(directory.getAbsolutePath() + "/" + event.context());
 					File file = filePath.toFile();
@@ -265,9 +259,5 @@ class FileWatcher implements Runnable {
 
 		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
 				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons, priority, false);
-	}
-
-	 void setShouldRun(boolean shouldRun) {
-		this.shouldRun = shouldRun;
 	}
 }

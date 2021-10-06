@@ -14,6 +14,7 @@ import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import lazyj.ExtProperties;
+import sun.misc.Signal;
 
 /**
  * @author asuiu
@@ -56,6 +57,7 @@ public class Main {
 
 	static FileWatcher transferWatcher;
 	static FileWatcher registrationWatcher;
+	static boolean shouldRun = true;
 
 	/**
 	 * Entry point
@@ -118,17 +120,17 @@ public class Main {
 			values.add(Integer.valueOf(registrationWatcher.executors.values().stream().mapToInt((s) -> s.getPoolSize()).sum()));
 		});
 
-		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-			transferWatcher.setShouldRun(false);
+		Signal.handle(new Signal("TERM"), signal -> {
+			shouldRun = false;
 			transferWatcher.shutdown();
-
-			registrationWatcher.setShouldRun(false);
 			registrationWatcher.shutdown();
 
 			logger.log(Level.WARNING, "The epn2eos tool is shutting down");
-		}));
 
-		while (true) {
+			Thread.currentThread().interrupt();
+		});
+
+		while (shouldRun) {
 			Thread.sleep(1000L * 60);
 		}
 	}
