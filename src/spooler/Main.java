@@ -44,7 +44,7 @@ public class Main {
     /**
      * Default Constants
      */
-	private static final String defaultMetadataDir = "/data/epn2eos_tool/epn2eos";
+    private static final String defaultMetadataDir = "/data/epn2eos_tool/epn2eos";
 	static final String defaultRegistrationDir = "/data/epn2eos_tool/daqSpool";
 	static final String defaultErrorDir = "/data/epn2eos_tool/error";
 	static final String defaultLogsDir = "/data/epn2eos_tool/logs";
@@ -58,6 +58,8 @@ public class Main {
 	static FileWatcher transferWatcher;
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
+
+	private static final String version = "v.1.2";
 
 	/**
 	 * Entry point
@@ -118,6 +120,9 @@ public class Main {
 
 			names.add("registration_slots");
 			values.add(Integer.valueOf(registrationWatcher.executors.values().stream().mapToInt((s) -> s.getPoolSize()).sum()));
+
+			names.add("version");
+			values.add(version);
 		});
 
 		Signal.handle(new Signal("TERM"), signal -> {
@@ -186,4 +191,6 @@ public class Main {
             logger.log(Level.WARNING, "Could not move metadata file: " + src, e.getMessage());
         }
     }
+
+
 }
