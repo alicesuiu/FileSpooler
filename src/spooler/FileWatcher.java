@@ -207,6 +207,13 @@ class FileWatcher implements Runnable {
 				writeFile.write("type" + ": " + type + "\n");
 			}
 
+			if (!type.equals("raw") && !type.equals("calib")) {
+				logger.log(Level.WARNING, "Unsupported type: " + type + " for file: " + file.getAbsolutePath());
+				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
+				Main.moveFile(logger, file.getAbsolutePath(), path);
+				return null;
+			}
+
 			if (size == 0) {
 				size = Files.size(Paths.get(lurl));
 				writeFile.write("size" + ": " + size + "\n");
