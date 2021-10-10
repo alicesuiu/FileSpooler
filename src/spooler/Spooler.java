@@ -3,6 +3,8 @@ package spooler;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.DecimalFormat;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -148,27 +150,35 @@ class Spooler implements Runnable {
 	private void transferFile() {
 		boolean status;
 
+		if (!toTransfer.existFile())
+			return;
+
 		status = transfer(toTransfer);
 		if (status) {
-			FileElement metadataFile = new FileElement(
-					null,
-					toTransfer.getMetaSurl(),
-					new File(toTransfer.getMetaFilePath()).length(),
-					toTransfer.getRun(),
-					GUIDUtils.generateTimeUUID(),
-					new File(toTransfer.getMetaFilePath()).lastModified(),
-					toTransfer.getLHCPeriod(),
-					null,
-					0,
-					toTransfer.getMetaFilePath(),
-					toTransfer.getType(),
-					toTransfer.getMetaCurl(),
-					toTransfer.getSeName(),
-					toTransfer.getSeioDaemons(),
-					null,
-					true);
+			if (!toTransfer.getFile().getAbsolutePath().endsWith(".tf")) {
+				FileElement metadataFile = new FileElement(
+						null,
+						toTransfer.getMetaSurl(),
+						new File(toTransfer.getMetaFilePath()).length(),
+						toTransfer.getRun(),
+						GUIDUtils.generateTimeUUID(),
+						new File(toTransfer.getMetaFilePath()).lastModified(),
+						toTransfer.getLHCPeriod(),
+						null,
+						0,
+						toTransfer.getMetaFilePath(),
+						toTransfer.getType(),
+						toTransfer.getMetaCurl(),
+						toTransfer.getSeName(),
+						toTransfer.getSeioDaemons(),
+						null,
+						true);
 
-			transfer(metadataFile);
+				if (!metadataFile.existFile())
+					return;
+
+				transfer(metadataFile);
+			}
 
             String destPath = Main.spoolerProperties.gets("registrationDir", Main.defaultRegistrationDir)
                     + toTransfer.getMetaFilePath().substring(toTransfer.getMetaFilePath().lastIndexOf('/'));

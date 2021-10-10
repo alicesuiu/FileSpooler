@@ -179,6 +179,15 @@ class FileWatcher implements Runnable {
 				return null;
 			}
 
+			if (isTransfer && !Files.exists(Paths.get(lurl))) {
+				logger.log(Level.WARNING, "File " + lurl + " is no longer in "
+						+ Paths.get(lurl).getParent().toAbsolutePath()
+						+ " and will not be attempted furher.");
+				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
+				Main.moveFile(logger, file.getAbsolutePath(), path);
+				return null;
+			}
+
 			type = prop.gets("type", null);
 			size = prop.getl("size", 0);
 			ctime = prop.getl("ctime", 0);

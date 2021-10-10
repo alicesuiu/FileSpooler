@@ -6,6 +6,8 @@ import alien.io.IOUtils;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.UUID;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
@@ -218,5 +220,24 @@ class FileElement implements Delayed {
 
     String getMetaCurl() {
         return curl.concat(".meta").replace(type, type + "_metadata");
+    }
+
+    boolean existFile() {
+        String src;
+
+        src = file.getAbsolutePath();
+
+        if (!Files.exists(Paths.get(src))) {
+            logger.log(Level.WARNING, "File " + src + " is no longer in "
+                    + Paths.get(src).getParent().toAbsolutePath()
+                    + " and will not be attempted furher.");
+            if (!isMetadata) {
+                String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
+                       + metaFilePath.substring(metaFilePath.lastIndexOf('/'));
+                Main.moveFile(logger, metaFilePath, path);
+            }
+            return false;
+        }
+        return true;
     }
 }

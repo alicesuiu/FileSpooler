@@ -95,7 +95,7 @@ class Registrator implements Runnable {
             monitor.incrementCacheHits("metadata_registered_files");
 
             if (!element.getFile().delete())
-                logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
+                logger.log(Level.WARNING, "Could not delete metadata file " + element.getFile().getAbsolutePath());
         } else {
             Main.nrDataFilesReg.getAndIncrement();
             logger.log(Level.INFO, "Total number of data files successfully registered: "
@@ -147,28 +147,36 @@ class Registrator implements Runnable {
 	}
 
 	private void registerFile() {
-		boolean status = register(toRegister);
+		boolean status;
+
+		status = register(toRegister);
 
 		if (status) {
-			FileElement metadataFile = new FileElement(
-					null,
-					toRegister.getMetaSurl(),
-					new File(toRegister.getMetaFilePath()).length(),
-					toRegister.getRun(),
-					GUIDUtils.generateTimeUUID(),
-					new File(toRegister.getMetaFilePath()).lastModified(),
-					toRegister.getLHCPeriod(),
-					null,
-					0,
-					toRegister.getMetaFilePath(),
-					toRegister.getType(),
-					toRegister.getMetaCurl(),
-					toRegister.getSeName(),
-					toRegister.getSeioDaemons(),
-					null,
-					true);
-			metadataFile.computeMD5();
-			register(metadataFile);
+			if (!toRegister.isMetadata() && !toRegister.getFile().getAbsolutePath().endsWith(".tf")) {
+				FileElement metadataFile = new FileElement(
+						null,
+						toRegister.getMetaSurl(),
+						new File(toRegister.getMetaFilePath()).length(),
+						toRegister.getRun(),
+						GUIDUtils.generateTimeUUID(),
+						new File(toRegister.getMetaFilePath()).lastModified(),
+						toRegister.getLHCPeriod(),
+						null,
+						0,
+						toRegister.getMetaFilePath(),
+						toRegister.getType(),
+						toRegister.getMetaCurl(),
+						toRegister.getSeName(),
+						toRegister.getSeioDaemons(),
+						null,
+						true);
+
+				metadataFile.computeMD5();
+				register(metadataFile);
+			} else if (!toRegister.isMetadata()) {
+				if (!new File(toRegister.getMetaFilePath()).delete())
+					logger.log(Level.WARNING, "Could not delete metadata file " + toRegister.getMetaFilePath());
+			}
 		}
 	}
 
