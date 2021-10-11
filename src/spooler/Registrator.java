@@ -46,11 +46,17 @@ class Registrator implements Runnable {
 		urlParam += encode("LHCPeriod") + "=" + encode(element.getLHCPeriod()) + "&";
 		urlParam += encode("guid") + "=" + encode(element.getGuid().toString()) + "&";
 		urlParam += encode("size") + "=" + encode(String.valueOf(element.getSize())) + "&";
+		urlParam += encode("ctime") + "=" + encode(String.valueOf(element.getCtime())) + "&";
 
 		if (element.getMd5() == null)
-			urlParam += encode("md5") + "=" + encode("missing");
+			urlParam += encode("md5") + "=" + encode("missing") + "&";
 		else
-			urlParam += encode("md5") + "=" + encode(element.getMd5());
+			urlParam += encode("md5") + "=" + encode(element.getMd5()) + "&";
+
+		if (element.getTFOrbits() == null)
+			urlParam += encode("TFOrbits") + "=" + encode("missing");
+		else
+			urlParam += encode("TFOrbits") + "=" + encode(element.getTFOrbits());
 
 		return urlParam;
 	}

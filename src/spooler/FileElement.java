@@ -37,13 +37,14 @@ class FileElement implements Delayed {
     private final String seioDaemons;
     private final String priority;
     private final boolean isMetadata;
+    private final String TFOrbits;
 
     private static final Logger logger = ConfigUtils.getLogger(FileElement.class.getCanonicalName());
 
     FileElement(String md5, String surl, long size, String run,
                 UUID guid, long ctime, String LHCPeriod, String metaFilePath,
                 long xxhash, String lurl, String type, String curl, String seName,
-                String seioDaemons, String priority, boolean isMetadata) {
+                String seioDaemons, String priority, boolean isMetadata, String TFOrbits) {
         this.md5 = md5;
         this.surl = surl;
         this.curl = curl;
@@ -59,6 +60,7 @@ class FileElement implements Delayed {
         this.seioDaemons = seioDaemons;
         this.priority = priority;
         this.isMetadata = isMetadata;
+        this.TFOrbits = TFOrbits;
         nrTries = 0;
         time = System.currentTimeMillis();
         file = new File(lurl);
@@ -132,6 +134,10 @@ class FileElement implements Delayed {
         return priority;
     }
 
+    public String getTFOrbits() {
+        return TFOrbits;
+    }
+
     boolean isMetadata() {
         return isMetadata;
     }
@@ -146,7 +152,7 @@ class FileElement implements Delayed {
 
     @Override
     public String toString() {
-        String sb = "FileElement{" + "lurl=" + file.getAbsolutePath() +
+        String sb = "FileElement{" + "file=" + file +
                 ", nrTries=" + nrTries +
                 ", time=" + time +
                 ", md5='" + md5 + '\'' +
@@ -163,6 +169,8 @@ class FileElement implements Delayed {
                 ", seName='" + seName + '\'' +
                 ", seioDaemons='" + seioDaemons + '\'' +
                 ", priority='" + priority + '\'' +
+                ", isMetadata=" + isMetadata +
+                ", TFOrbits='" + TFOrbits + '\'' +
                 '}';
         return sb;
     }

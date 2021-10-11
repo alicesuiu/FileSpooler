@@ -158,7 +158,7 @@ class FileWatcher implements Runnable {
 	}
 
 	private FileElement readMetadata(File file) {
-		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority;
+		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority, TFOrbits;
 		long size, ctime, xxhash;
 		UUID guid;
 
@@ -201,6 +201,7 @@ class FileWatcher implements Runnable {
 			seName = prop.gets("seName", null);
 			seioDaemons = prop.gets("seioDaemons", null);
 			priority = prop.gets("priority", null);
+			TFOrbits = prop.gets("TFOrbits", null);
 
 			if (type == null || type.isBlank()) {
 				type = "raw";
@@ -274,6 +275,7 @@ class FileWatcher implements Runnable {
 		}
 
 		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
-				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons, priority, false);
+				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons,
+				priority, false, TFOrbits);
 	}
 }
