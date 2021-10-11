@@ -24,13 +24,9 @@ public class Main {
 	static AtomicInteger nrFilesOnSend = new AtomicInteger(0);
 	static AtomicInteger nrFilesOnRegister = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesSent = new AtomicInteger(0);
-    static AtomicInteger nrMetaFilesSent = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesReg = new AtomicInteger(0);
-    static AtomicInteger nrMetaFilesReg = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesFailed = new AtomicInteger(0);
-    static AtomicInteger nrMetaFilesFailed = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesRegFailed = new AtomicInteger(0);
-    static AtomicInteger nrMetaFilesRegFailed = new AtomicInteger(0);
 
 	static ExtProperties spoolerProperties;
 
@@ -59,7 +55,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.2";
+	private static final String version = "v.1.3";
 
 	/**
 	 * Entry point
@@ -191,6 +187,4 @@ public class Main {
             logger.log(Level.WARNING, "Could not move metadata file: " + src, e.getMessage());
         }
     }
-
-
 }

@@ -88,37 +88,47 @@ class Registrator implements Runnable {
 
 	private static void onSuccess(FileElement element) {
         logger.log(Level.INFO, "Successfully registered: " + element.getCurl());
-	    if (element.isMetadata()) {
-            Main.nrMetaFilesReg.getAndIncrement();
-            logger.log(Level.INFO, "Total number of metadata files successfully registered: "
-                    + Main.nrMetaFilesReg.get());
-            monitor.incrementCacheHits("metadata_registered_files");
 
-            if (!element.getFile().delete())
-                logger.log(Level.WARNING, "Could not delete metadata file " + element.getFile().getAbsolutePath());
-        } else {
-            Main.nrDataFilesReg.getAndIncrement();
-            logger.log(Level.INFO, "Total number of data files successfully registered: "
-                    + Main.nrDataFilesReg.get());
-            monitor.incrementCacheHits("data_registered_files");
-        }
+		Main.nrDataFilesReg.getAndIncrement();
+		logger.log(Level.INFO, "Total number of data files successfully registered: "
+				+ Main.nrDataFilesReg.get());
+		monitor.incrementCacheHits("data_registered_files");
+
+		if (!element.getFile().delete())
+			logger.log(Level.WARNING, "Could not delete metadata file " + element.getFile().getAbsolutePath());
 	}
 
 	private static void onFail(FileElement element, String msg, int status) {
-	    if (element.isMetadata()) {
-            Main.nrMetaFilesRegFailed.getAndIncrement();
-            logger.log(Level.INFO, "Total number of metadata files whose registration failed: "
-                    + Main.nrMetaFilesRegFailed.get());
-            monitor.incrementCacheMisses("metadata_registered_files");
-        } else{
-            Main.nrDataFilesRegFailed.getAndIncrement();
-            logger.log(Level.INFO, "Total number of data files whose registration failed: "
-                    + Main.nrDataFilesRegFailed.get());
-            monitor.incrementCacheMisses("data_registered_files");
-        }
+		Main.nrDataFilesRegFailed.getAndIncrement();
+		logger.log(Level.INFO, "Total number of data files whose registration failed: "
+				+ Main.nrDataFilesRegFailed.get());
+		monitor.incrementCacheMisses("data_registered_files");
 
         logger.log(Level.INFO, "Failed registration for: " + element.getFile().getAbsolutePath()
 				+ ".\nMessage: " + msg + "\nStatus Code: " + status);
+
+		FileElement metadataFile = new FileElement(
+				null,
+				element.getMetaSurl(),
+				new File(element.getMetaFilePath()).length(),
+				element.getRun(),
+				GUIDUtils.generateTimeUUID(),
+				new File(element.getMetaFilePath()).lastModified(),
+				element.getLHCPeriod(),
+				null,
+				0,
+				element.getMetaFilePath(),
+				element.getType(),
+				element.getMetaCurl(),
+				element.getSeName(),
+				element.getSeioDaemons(),
+				null,
+				true,
+				null);
+
+		if (!metadataFile.existFile())
+			return;
+
         if (status == HttpServletResponse.SC_BAD_REQUEST
 				|| status == HttpServletResponse.SC_FORBIDDEN
 				|| status == HttpServletResponse.SC_CONFLICT) {
@@ -146,47 +156,13 @@ class Registrator implements Runnable {
 		return false;
 	}
 
-	private void registerFile() {
-		boolean status;
-
-		status = register(toRegister);
-
-		if (status) {
-			if (!toRegister.isMetadata() && !toRegister.getFile().getAbsolutePath().endsWith(".tf")) {
-				FileElement metadataFile = new FileElement(
-						null,
-						toRegister.getMetaSurl(),
-						new File(toRegister.getMetaFilePath()).length(),
-						toRegister.getRun(),
-						GUIDUtils.generateTimeUUID(),
-						new File(toRegister.getMetaFilePath()).lastModified(),
-						toRegister.getLHCPeriod(),
-						null,
-						0,
-						toRegister.getMetaFilePath(),
-						toRegister.getType(),
-						toRegister.getMetaCurl(),
-						toRegister.getSeName(),
-						toRegister.getSeioDaemons(),
-						null,
-						true);
-
-				metadataFile.computeMD5();
-				register(metadataFile);
-			} else if (!toRegister.isMetadata()) {
-				if (!new File(toRegister.getMetaFilePath()).delete())
-					logger.log(Level.WARNING, "Could not delete metadata file " + toRegister.getMetaFilePath());
-			}
-		}
-	}
-
 	@Override
 	public void run() {
 		logger.log(Level.INFO, "Total number of files registered in parallel: "
 				+ Main.nrFilesOnRegister.incrementAndGet());
 
 		try {
-			registerFile();
+			register(toRegister);
 		}
 		finally {
 			Main.nrFilesOnRegister.decrementAndGet();
