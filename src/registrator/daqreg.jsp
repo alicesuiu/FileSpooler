@@ -2,13 +2,46 @@
 <%@ page import="lazyj.*,alien.catalogue.*,alien.user.*"%>
 <%@ page import="java.util.logging.Logger"%>
 <%@ page import="alien.config.ConfigUtils"%>
-<%@ page import="java.util.logging.Level"%>
 <%@ page import="lazyj.commands.CommandOutput"%>
 <%@ page import="lia.Monitor.Store.Fast.DB" %>
+<%@ page import="java.util.Date" %>
+<%@ page import="java.io.PrintWriter" %>
+<%@ page import="java.io.FileWriter" %>
 
 <%!private static final Object lock = new Object();
+	private static PrintWriter pwLog = null;
 	private static final Logger logger = ConfigUtils.getLogger("daqreg");
 	private static final AliEnPrincipal OWNER = UserFactory.getByUsername("alidaq");
+
+	private static final synchronized void logMessage(final String message){
+		final Date d = new Date();
+
+		if (pwLog==null){
+			try{
+				pwLog = new PrintWriter(new FileWriter("/home/monalisa/MLrepository/logs/daqreg.log", true));
+			}
+			catch (Exception e){
+				// ignore
+			}
+		}
+
+		boolean logged = false;
+
+		if (pwLog!=null){
+			try{
+				pwLog.println(d+": "+message);
+				pwLog.flush();
+
+				logged = true;
+			}
+			catch (Exception e){
+				pwLog = null;
+			}
+		}
+
+		if (!logged)
+			System.err.println("daqreg.jsp: "+d+" : "+message);
+	}
 
 	private static final ExpirationCache<String, String> mkDirsHistory = new ExpirationCache<>(1000);%>
 <%
@@ -19,7 +52,7 @@ if (
     !clientAddr.equals("128.141.19.252")		// alihlt-gw-prod.cern.ch
 ) {
 	lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?DENIED=" + clientAddr, 0, request);
-	logger.log(Level.WARNING, "Client not authorized");
+	logMessage("Client not authorized");
 	response.sendError(HttpServletResponse.SC_FORBIDDEN, "Client not authorized");
 	return;
 }
@@ -45,7 +78,7 @@ if (size <= 0 || surl.length() == 0
 		|| curl.length() == 0 || seName.length() == 0
 		|| seioDaemons.length() == 0 || ctime <= 0
 		|| TFOrbits.length() == 0) {
-	logger.log(Level.WARNING, "Wrong parameters");
+	logMessage("Wrong parameters");
 	response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 	return;
 }
@@ -66,7 +99,7 @@ final String msg = "File : " + curl
 		+ "\nCtime: " + ctime
 		+ "\nTFOrbits: " + TFOrbits;
 
-logger.log(Level.INFO, msg);
+logMessage(msg);
 
 int idx = curl.indexOf(period);
 
@@ -76,14 +109,14 @@ if (idx > 0) {
 	if (mkDirsHistory.get(sPartitionDir) == null) {
 		synchronized (lock) {
 			if (LFNUtils.mkdirs(OWNER, sPartitionDir) == null) {
-				logger.log(Level.WARNING, "Cannot create directory: " + sPartitionDir);
+				logMessage("Cannot create directory: " + sPartitionDir);
 				response.sendError(HttpServletResponse.SC_FORBIDDEN, "Cannot create directory: " + sPartitionDir);
 				return;
 			}
 
 			final CommandOutput co = alien.pool.AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
 			alien.catalogue.CatalogueUtils.invalidateIndexTableCache();
-			logger.log(Level.INFO, "daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);
+			logMessage("daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);
 		}
 		mkDirsHistory.put(sPartitionDir, sPartitionDir, 1000 * 60 * 10);
 	}
@@ -92,7 +125,7 @@ if (idx > 0) {
 LFN existing = LFNUtils.getLFN(curl);
 
 if (existing != null) {
-	logger.log(Level.INFO, "File was already registered");
+	logMessage("File was already registered");
 
 	if (existing.size != size)
 		response.sendError(HttpServletResponse.SC_CONFLICT, "File " + curl
@@ -108,65 +141,61 @@ else {
 		}
 	}
 	catch (Throwable t) {
-		logger.log(Level.WARNING, "Caught exception", t);
+		logMessage("Caught exception: " + t.getMessage());
 		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Caught exception : "
 		+ t + " (" + t.getMessage() + ")");
 	}
 
 	if (!done) {
-		logger.log(Level.INFO, "Registering failed for:\n" + msg);
+		logMessage("Registering failed for:\n" + msg);
 		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Registering by JAPI failed for:\n" + msg);
 	}
 	else {
-		logger.log(Level.INFO, "Successfuly registered for:\n" + msg);
+		logMessage("Successfuly registered for:\n" + msg);
 		response.setStatus(HttpServletResponse.SC_CREATED);
 	}
 }
 
-int code = response.getStatus();
+int code;
+final DB db = new DB();
 
-if (TFOrbits != null) {
+if (!db.query("SELECT 123 FROM rawdata WHERE lfn='" + Format.escSQL(curl) + "';")) {
+	logMessage("Repository: cannot query database");
+	return;
+}
 
-	final DB db = new DB();
+if (db.geti(1) == 123) {
+	final String q = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
+			+ "', addtime=" + ctime + ", TFOrbits=ARRAY[" + Format.escSQL(TFOrbits)
+			+ "] WHERE lfn='" + Format.escSQL(curl) + "' AND (size IS NULL OR size!=" + size
+			+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime + ");";
 
-	if (!db.query("SELECT 123 FROM rawdata WHERE lfn='" + Format.escSQL(curl) + "';")) {
-		logger.log(Level.WARNING, "Repository: cannot query database");
-		return;
-	}
-
-	if (db.geti(1) == 123) {
-		final String q = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
-				+ "', addtime=" + ctime + ", TFOrbits=ARRAY[" + Format.escSQL(TFOrbits)
-				+ "] WHERE lfn='" + Format.escSQL(curl) + "' AND (size IS NULL OR size!=" + size
-				+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime + ");";
-
-		if (db.syncUpdateQuery(q)) {
-			if (db.getUpdateCount() == 0) {
-				logger.log(Level.WARNING, "Repository: file existed with all details");
-				code = 1;
-			} else {
-				logger.log(Level.WARNING, "Repository: file existed but was updated");
-				code = 2;
-			}
+	if (db.syncUpdateQuery(q)) {
+		if (db.getUpdateCount() == 0) {
+			logMessage("Repository: file existed with all details");
+			code = 1;
 		} else {
-			logger.log(Level.WARNING, "Repository: cannot update the existing file");
-			code = 3;
+			logMessage("Repository: file existed but was updated");
+			code = 2;
 		}
 	} else {
-		if (db.syncUpdateQuery("INSERT INTO rawdata (lfn, addtime, size, pfn, TFOrbits) VALUES ('"
-				+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
-				+ ", ARRAY[" + Format.escSQL(TFOrbits) + "]" + "');")) {
-			if (db.getUpdateCount() == 0) {
-				logger.log(Level.WARNING, "Repository: cannot insert new file");
-				code = 4;
-			} else {
-				logger.log(Level.WARNING, "Repository: new file successfully inserted");
-				code = 5;
-			}
+		logMessage("Repository: cannot update the existing file");
+		code = 3;
+	}
+} else {
+	if (db.syncUpdateQuery("INSERT INTO rawdata (lfn, addtime, size, pfn, TFOrbits) VALUES ('"
+			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
+			+ "', ARRAY[" + Format.escSQL(TFOrbits) + "]" + ");")) {
+		if (db.getUpdateCount() == 0) {
+			logMessage("Repository: cannot insert new file");
+			code = 4;
 		} else {
-			logger.log(Level.WARNING, "Repository: cannot insert new file");
-			code = 6;
+			logMessage("Repository: new file successfully inserted");
+			code = 5;
 		}
+	} else {
+		logMessage("Repository: cannot insert new file");
+		code = 6;
 	}
 }
 
