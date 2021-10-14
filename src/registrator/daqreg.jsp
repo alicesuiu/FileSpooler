@@ -90,16 +90,8 @@ if (TFOrbits.contains("missing"))
 	TFOrbits = null;
 
 final String pfn = seioDaemons + "/" + surl;
-final String msg = "File : " + curl
-		+ "\nPFN: " + pfn
-		+ "\nGUID: " + guid
-		+ "\nMD5: " + md5
-		+ "\nSize: " + size
-		+ "\nSE: " + seName
-		+ "\nCtime: " + ctime
-		+ "\nTFOrbits: " + TFOrbits;
-
-logMessage(msg);
+final String msg = curl + ", " + pfn + ", " + guid + ", " + md5
+		+ ", " + size + ", " + seName + ", " + ctime + ", " + TFOrbits;
 
 int idx = curl.indexOf(period);
 
@@ -147,30 +139,42 @@ else {
 	}
 
 	if (!done) {
-		logMessage("Registering failed for:\n" + msg);
+		logMessage("Registering failed for: " + msg);
 		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Registering by JAPI failed for:\n" + msg);
 	}
 	else {
-		logMessage("Successfuly registered for:\n" + msg);
+		logMessage("Successfuly registered for: " + msg);
 		response.setStatus(HttpServletResponse.SC_CREATED);
 	}
 }
 
 int code;
 final DB db = new DB();
+String insert, update;
 
 if (!db.query("SELECT 123 FROM rawdata WHERE lfn='" + Format.escSQL(curl) + "';")) {
 	logMessage("Repository: cannot query database");
 	return;
 }
 
-if (db.geti(1) == 123) {
-	final String q = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
+if (TFOrbits != null) {
+	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, TFOrbits) VALUES ('"
+			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
+			+ "', ARRAY[" + Format.escSQL(TFOrbits) + "]" + ");";
+	update = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
 			+ "', addtime=" + ctime + ", TFOrbits=ARRAY[" + Format.escSQL(TFOrbits)
 			+ "] WHERE lfn='" + Format.escSQL(curl) + "' AND (size IS NULL OR size!=" + size
 			+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime + ");";
+} else {
+	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn) VALUES ('"
+			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl) + "');";
+	update = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
+			+ "', addtime=" + ctime + "WHERE lfn='" + Format.escSQL(curl) + "' AND (size IS NULL OR size!=" + size
+			+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime + ");";
+}
 
-	if (db.syncUpdateQuery(q)) {
+if (db.geti(1) == 123) {
+	if (db.syncUpdateQuery(update)) {
 		if (db.getUpdateCount() == 0) {
 			logMessage("Repository: file existed with all details");
 			code = 1;
@@ -183,9 +187,7 @@ if (db.geti(1) == 123) {
 		code = 3;
 	}
 } else {
-	if (db.syncUpdateQuery("INSERT INTO rawdata (lfn, addtime, size, pfn, TFOrbits) VALUES ('"
-			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
-			+ "', ARRAY[" + Format.escSQL(TFOrbits) + "]" + ");")) {
+	if (db.syncUpdateQuery(insert)) {
 		if (db.getUpdateCount() == 0) {
 			logMessage("Repository: cannot insert new file");
 			code = 4;
