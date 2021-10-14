@@ -6,6 +6,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -55,7 +57,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.3";
+	private static final String version = "v.1.5";
 
 	/**
 	 * Entry point
@@ -117,6 +119,12 @@ public class Main {
 			names.add("registration_slots");
 			values.add(Integer.valueOf(registrationWatcher.executors.values().stream().mapToInt((s) -> s.getPoolSize()).sum()));
 
+			names.add("transfer_queued_files_size");
+			values.add(Integer.valueOf(transferWatcher.executors.values().stream().mapToInt(Main::totalFilesSize).sum()));
+
+			names.add("active_error_files");
+			values.add(Integer.valueOf(totalErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+
 			names.add("version");
 			values.add(version);
 		});
@@ -134,6 +142,23 @@ public class Main {
 		while (shouldRun) {
 			Thread.sleep(1000L * 60);
 		}
+	}
+
+	private static int totalFilesSize(ScheduledThreadPoolExecutor s) {
+		int sum = 0;
+
+		BlockingQueue<Runnable> queue = s.getQueue();
+		for (Runnable spooler : queue) {
+			if (spooler instanceof Spooler) {
+				sum += ((Spooler) spooler).getToTransfer().getFile().length();
+			}
+		}
+
+		return sum;
+	}
+
+	private static int totalErrorFiles(File directory) {
+		return directory.isDirectory() ? directory.list().length : 0;
 	}
 
 	static boolean sanityCheckDir(Path path) {

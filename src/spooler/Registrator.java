@@ -100,8 +100,8 @@ class Registrator implements Runnable {
 				+ Main.nrDataFilesReg.get());
 		monitor.incrementCacheHits("data_registered_files");
 
-		if (!element.getFile().delete())
-			logger.log(Level.WARNING, "Could not delete metadata file " + element.getFile().getAbsolutePath());
+		if (!new File(element.getMetaFilePath()).delete())
+			logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
 	}
 
 	private static void onFail(FileElement element, String msg, int status) {
@@ -141,6 +141,7 @@ class Registrator implements Runnable {
 			String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
 					+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
 			Main.moveFile(logger, element.getMetaFilePath(), path);
+			monitor.incrementCounter("error_files");
 		}
 		else {
 			element.computeDelay();

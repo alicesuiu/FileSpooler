@@ -2,6 +2,8 @@ package spooler;
 
 import alien.config.ConfigUtils;
 import alien.io.IOUtils;
+import alien.monitoring.Monitor;
+import alien.monitoring.MonitorFactory;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -40,6 +42,7 @@ class FileElement implements Delayed {
     private final String TFOrbits;
 
     private static final Logger logger = ConfigUtils.getLogger(FileElement.class.getCanonicalName());
+    private static final Monitor monitor = MonitorFactory.getMonitor(FileElement.class.getCanonicalName());
 
     FileElement(String md5, String surl, long size, String run,
                 UUID guid, long ctime, String LHCPeriod, String metaFilePath,
@@ -243,6 +246,7 @@ class FileElement implements Delayed {
                 String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
                        + metaFilePath.substring(metaFilePath.lastIndexOf('/'));
                 Main.moveFile(logger, metaFilePath, path);
+                monitor.incrementCounter("error_files");
             }
             return false;
         }

@@ -26,13 +26,14 @@ import lazyj.Format;
 class Spooler implements Runnable {
 	private static final Logger logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
+
 	private final FileElement toTransfer;
 
 	Spooler(FileElement toTransfer) {
 		this.toTransfer = toTransfer;
 	}
 
-	private static boolean checkDataIntegrity(FileElement element, String xxhash) {
+	/*private static boolean checkDataIntegrity(FileElement element, String xxhash) {
 		long metaXXHash;
 		String fileXXHash;
 
@@ -60,6 +61,10 @@ class Spooler implements Runnable {
 				+ element.getFile().getName() + " is " + fileXXHash);
 
 		return fileXXHash.equals(xxhash);
+	}*/
+
+	public FileElement getToTransfer() {
+		return toTransfer;
 	}
 
 	private static void onSuccess(FileElement element, double transfer_time) {
@@ -154,6 +159,7 @@ class Spooler implements Runnable {
 				String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
 						+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
 				Main.moveFile(logger, element.getMetaFilePath(), path);
+				monitor.incrementCounter("error_files");
 			} else
 				onFail(element);
 		}

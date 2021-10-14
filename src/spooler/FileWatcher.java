@@ -176,6 +176,7 @@ class FileWatcher implements Runnable {
 				logger.log(Level.WARNING, "Missing mandatory attributes in file: " + file.getAbsolutePath());
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path);
+				monitor.incrementCounter("error_files");
 				return null;
 			}
 
@@ -185,6 +186,7 @@ class FileWatcher implements Runnable {
 						+ " and will not be attempted furher.");
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path);
+				monitor.incrementCounter("error_files");
 				return null;
 			}
 
@@ -212,6 +214,7 @@ class FileWatcher implements Runnable {
 				logger.log(Level.WARNING, "Unsupported type: " + type + " for file: " + file.getAbsolutePath());
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path);
+				monitor.incrementCounter("error_files");
 				return null;
 			}
 
@@ -225,6 +228,7 @@ class FileWatcher implements Runnable {
                             + " is different than what the metadata indicates (" + size + " vs " + realSize + ")");
 					path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
                     Main.moveFile(logger, file.getAbsolutePath(), path);
+					monitor.incrementCounter("error_files");
                     return null;
                 }
 			}
@@ -271,6 +275,7 @@ class FileWatcher implements Runnable {
 			logger.log(Level.WARNING, "Could not read/write the metadata file " + file.getAbsolutePath(), e.getMessage());
 			path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 			Main.moveFile(logger, file.getAbsolutePath(), path);
+			monitor.incrementCounter("error_files");
 			return null;
 		}
 
