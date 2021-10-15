@@ -57,7 +57,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.5";
+	private static final String version = "v.1.6";
 
 	/**
 	 * Entry point
@@ -120,7 +120,7 @@ public class Main {
 			values.add(Integer.valueOf(registrationWatcher.executors.values().stream().mapToInt((s) -> s.getPoolSize()).sum()));
 
 			names.add("transfer_queued_files_size");
-			values.add(Integer.valueOf(transferWatcher.executors.values().stream().mapToInt(Main::totalFilesSize).sum()));
+			values.add(Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum()));
 
 			names.add("active_error_files");
 			values.add(Integer.valueOf(totalErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
@@ -144,8 +144,8 @@ public class Main {
 		}
 	}
 
-	private static int totalFilesSize(ScheduledThreadPoolExecutor s) {
-		int sum = 0;
+	private static long totalFilesSize(ScheduledThreadPoolExecutor s) {
+		long sum = 0;
 
 		BlockingQueue<Runnable> queue = s.getQueue();
 		for (Runnable spooler : queue) {
