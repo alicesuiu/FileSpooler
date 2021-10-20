@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,10 +39,10 @@ public class Main {
 	 */
 	private static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
 
-    /**
-     * Default Constants
-     */
-    private static final String defaultMetadataDir = "/data/epn2eos_tool/epn2eos";
+	/**
+	 * Default Constants
+	 */
+	private static final String defaultMetadataDir = "/data/epn2eos_tool/epn2eos";
 	static final String defaultRegistrationDir = "/data/epn2eos_tool/daqSpool";
 	static final String defaultErrorDir = "/data/epn2eos_tool/error";
 	static final String defaultLogsDir = "/data/epn2eos_tool/logs";
@@ -63,34 +62,34 @@ public class Main {
 
 	/**
 	 * Entry point
-	 * 
+	 *
 	 * @param args
 	 * @throws InterruptedException
 	 */
-	public static void main(String[] args) throws InterruptedException {
+	public static void main(final String[] args) throws InterruptedException {
 		spoolerProperties = ConfigUtils.getConfiguration("epn2eos");
 
-        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
-            return;
-        logger.log(Level.INFO, "Metadata Dir Path: "
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
+			return;
+		logger.log(Level.INFO, "Metadata Dir Path: "
 				+ spoolerProperties.gets("metadataDir", defaultMetadataDir));
 
-        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
-            return;
-        logger.log(Level.INFO, "Registration Dir Path: "
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
+			return;
+		logger.log(Level.INFO, "Registration Dir Path: "
 				+ spoolerProperties.gets("registrationDir", defaultRegistrationDir));
 
-        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir))))
-            return;
-        logger.log(Level.INFO, "Error Dir Path for transfer: "
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir))))
+			return;
+		logger.log(Level.INFO, "Error Dir Path for transfer: "
 				+ spoolerProperties.gets("errorDir", defaultErrorDir));
 
-        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir))))
-        	return;
-        logger.log(Level.INFO, "Error Dir Path for registration: "
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir))))
+			return;
+		logger.log(Level.INFO, "Error Dir Path for registration: "
 				+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir));
 
-        logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
+		logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
 		logger.log(Level.INFO, "MD5 option: " + spoolerProperties.getb("md5Enable", defaultMd5Enable));
 
 		logger.log(Level.INFO, "Number of Transfer Threads: " + spoolerProperties.geti("queue.default.threads", defaultTransferThreads));
@@ -132,14 +131,37 @@ public class Main {
 			names.add("transfer_queued_files_size");
 			values.add(Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum()));
 
-			names.add("active_missing_error_files");
-			values.add(Integer.valueOf(missingErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+			final File directory = new File(spoolerProperties.gets("errorDir", defaultErrorDir));
 
-			names.add("active_invalid_error_files");
-			values.add(Integer.valueOf(invalidErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+			if (directory.isDirectory()) {
+				final String[] listing = directory.list();
 
-			names.add("active_transfer_error_files");
-			values.add(Integer.valueOf(transferErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+				if (listing != null) {
+					int missing = 0;
+					int done = 0;
+					int invalid = 0;
+
+					for (final String name : listing) {
+						if (name.endsWith(".missing"))
+							missing++;
+						else
+							if (name.endsWith(".done"))
+								done++;
+							else
+								if (name.endsWith(".invalid"))
+									invalid++;
+					}
+
+					names.add("active_missing_error_files");
+					values.add(Integer.valueOf(missing));
+
+					names.add("active_invalid_error_files");
+					values.add(Integer.valueOf(invalid));
+
+					names.add("active_transfer_error_files");
+					values.add(Integer.valueOf(done));
+				}
+			}
 
 			names.add("active_registration_error_files");
 			values.add(Integer.valueOf(registrationErrorFiles(new File(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))));
@@ -148,6 +170,8 @@ public class Main {
 			values.add(version);
 		});
 
+		final Object lock = new Object();
+
 		Signal.handle(new Signal("TERM"), signal -> {
 			shouldRun = false;
 			transferWatcher.shutdown();
@@ -155,19 +179,23 @@ public class Main {
 
 			logger.log(Level.WARNING, "The epn2eos tool is shutting down");
 
-			Thread.currentThread().interrupt();
+			synchronized (lock) {
+				lock.notifyAll();
+			}
 		});
 
 		while (shouldRun) {
-			Thread.sleep(1000L * 60);
+			synchronized (lock) {
+				lock.wait(1000L * 60);
+			}
 		}
 	}
 
-	private static long totalFilesSize(ScheduledThreadPoolExecutor s) {
+	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
 		long sum = 0;
 
-		BlockingQueue<Runnable> queue = s.getQueue();
-		for (Runnable spooler : queue) {
+		final BlockingQueue<Runnable> queue = s.getQueue();
+		for (final Runnable spooler : queue) {
 			if (spooler instanceof Spooler) {
 				sum += ((Spooler) spooler).getToTransfer().getFile().length();
 			}
@@ -176,64 +204,55 @@ public class Main {
 		return sum;
 	}
 
-	private static int missingErrorFiles(File directory) {
-		return (directory != null && directory.isDirectory()) ?
-			(int) Arrays.stream(directory.listFiles()).filter(f -> f.getName().endsWith("missing")).count()
-				: 0;
+	private static int registrationErrorFiles(final File directory) {
+		if (directory != null && directory.isDirectory()) {
+			final String[] listing = directory.list();
+
+			if (listing != null)
+				return listing.length;
+		}
+
+		return 0;
 	}
 
-	private static int invalidErrorFiles(File directory) {
-		return (directory != null && directory.isDirectory()) ?
-				(int) Arrays.stream(directory.listFiles()).filter(f -> f.getName().endsWith("invalid")).count()
-				: 0;
-	}
+	static boolean sanityCheckDir(final Path path) {
+		File directory;
 
-	private static int transferErrorFiles(File directory) {
-		return (directory != null && directory.isDirectory()) ?
-				(int) Arrays.stream(directory.listFiles()).filter(f -> f.getName().endsWith("done")).count()
-				: 0;
-	}
-
-	private static int registrationErrorFiles(File directory) {
-		return (directory != null && directory.isDirectory()) ? directory.list().length : 0;
-	}
-
-	static boolean sanityCheckDir(Path path) {
-	    File directory;
-
-	    if (Files.isSymbolicLink(path)) {
-            try {
-                directory = Files.readSymbolicLink(path).toFile();
-            } catch (IOException e) {
-                logger.log(Level.WARNING, "Caught exception! " + path.toAbsolutePath() + " is a symbolic link");
-                return  false;
-            }
-        }
-	    else
-	        directory = path.toFile();
-
-        if (!directory.exists()) {
-            if (!directory.mkdir()) {
-            	logger.log(Level.WARNING, "Could not create directory " + directory.getAbsolutePath());
-            	return false;
+		if (Files.isSymbolicLink(path)) {
+			try {
+				directory = Files.readSymbolicLink(path).toFile();
 			}
-        }
+			catch (final IOException e) {
+				logger.log(Level.WARNING, "Caught exception! " + path.toAbsolutePath() + " is a symbolic link that cannot be followed", e);
+				return false;
+			}
+		}
+		else
+			directory = path.toFile();
 
-        if (!directory.isDirectory()) {
+		if (!directory.exists()) {
+			if (!directory.mkdirs()) {
+				logger.log(Level.WARNING, "Could not create directory " + directory.getAbsolutePath());
+				return false;
+			}
+		}
+
+		if (!directory.isDirectory()) {
 			logger.log(Level.WARNING, directory.getAbsolutePath() + " is not a directory");
 			return false;
 		}
 
-        if (!directory.canWrite() && !directory.canRead() && !directory.canExecute()) {
-            logger.log(Level.WARNING, "Could not read, write and execute on directory "
+		if (!directory.canWrite() && !directory.canRead() && !directory.canExecute()) {
+			logger.log(Level.WARNING, "Could not read, write and execute on directory "
 					+ directory.getAbsolutePath());
-            return false;
-        }
+			return false;
+		}
 
 		try {
-			Path tmpFile = Files.createTempFile(Paths.get(directory.getAbsolutePath()), null, null);
+			final Path tmpFile = Files.createTempFile(Paths.get(directory.getAbsolutePath()), null, null);
 			Files.delete(tmpFile);
-		} catch (IOException e) {
+		}
+		catch (final IOException e) {
 			logger.log(Level.WARNING, "Could not create/delete file inside the "
 					+ directory.getAbsolutePath() + " directory", e.getMessage());
 			return false;
@@ -242,11 +261,12 @@ public class Main {
 		return true;
 	}
 
-    static void moveFile(Logger logger, String src, String dest) {
-        try {
-            Files.move(Paths.get(src), Paths.get(dest), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            logger.log(Level.WARNING, "Could not move metadata file: " + src, e.getMessage());
-        }
-    }
+	static void moveFile(final Logger log, final String src, final String dest) {
+		try {
+			Files.move(Paths.get(src), Paths.get(dest), StandardCopyOption.REPLACE_EXISTING);
+		}
+		catch (final IOException e) {
+			log.log(Level.WARNING, "Could not move metadata file: " + src, e.getMessage());
+		}
+	}
 }

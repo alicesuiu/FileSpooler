@@ -1,6 +1,10 @@
 package spooler;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -13,7 +17,12 @@ import java.nio.file.WatchService;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -30,14 +39,16 @@ import lazyj.ExtProperties;
  */
 class FileWatcher implements Runnable {
 	private static final Logger logger = ConfigUtils.getLogger(FileWatcher.class.getCanonicalName());
-    private static final Monitor monitor = MonitorFactory.getMonitor(FileWatcher.class.getCanonicalName());
-	private AtomicInteger nrFilesWatched = new AtomicInteger(0);
+	private static final Monitor monitor = MonitorFactory.getMonitor(FileWatcher.class.getCanonicalName());
+	private final AtomicInteger nrFilesWatched = new AtomicInteger(0);
 	private final File directory;
 	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
 	private final boolean isTransfer;
 	BlockingQueue<File> processNewFiles = new LinkedBlockingDeque<>();
+	private Thread intermediateThread = null;
+	private Thread myself = null;
 
-	FileWatcher(File directory, boolean isTransfer) {
+	FileWatcher(final File directory, final boolean isTransfer) {
 		this.directory = directory;
 		this.isTransfer = isTransfer;
 	}
@@ -47,42 +58,47 @@ class FileWatcher implements Runnable {
 		addFilesToSend(directory.getAbsolutePath());
 
 		try (FileSystem fs = FileSystems.getDefault(); WatchService watchService = fs.newWatchService()) {
-			Path path = Paths.get(directory.getAbsolutePath());
+			final Path path = Paths.get(directory.getAbsolutePath());
 			path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
 
 			WatchKey key;
 			while (Main.shouldRun && (key = watchService.take()) != null) {
-				for (WatchEvent<?> event : key.pollEvents()) {
-					Path filePath = Paths.get(directory.getAbsolutePath() + "/" + event.context());
-					File file = filePath.toFile();
+				try {
+					for (final WatchEvent<?> event : key.pollEvents()) {
+						final Path filePath = Paths.get(directory.getAbsolutePath() + "/" + event.context());
+						final File file = filePath.toFile();
 
-					if (file.getName().endsWith(".done")) {
-						processNewFiles.put(file);
+						if (file.getName().endsWith(".done")) {
+							processNewFiles.add(file);
+						}
 					}
 				}
-
-				key.reset();
+				catch (final Exception e) {
+					logger.log(Level.WARNING, "Exception handling one event", e);
+				}
+				finally {
+					key.reset();
+				}
 			}
 		}
 		catch (IOException | InterruptedException e) {
 			logger.log(Level.WARNING,
 					"Could not create " + (isTransfer ? "transfer_watcher" : "reg_watcher"), e.getMessage());
-			System.exit(-1);
 		}
 	}
 
 	void watch() {
 		if (directory.exists()) {
-			Thread thread = new Thread(this);
-			thread.setDaemon(true);
-			thread.start();
-			thread.setName("Watcher Thread I for " + directory.getAbsolutePath() + " directory");
+			myself = new Thread(this);
+			myself.setDaemon(true);
+			myself.start();
+			myself.setName("Watcher Thread I for " + directory.getAbsolutePath() + " directory");
 
-			Thread intermediateThread = new Thread(() -> {
+			intermediateThread = new Thread(() -> {
 				while (Main.shouldRun) {
 					try {
-						File file = processNewFiles.take();
-						FileElement element = readMetadata(file);
+						final File file = processNewFiles.take();
+						final FileElement element = readMetadata(file);
 						if (element == null)
 							continue;
 						addElement(element);
@@ -93,38 +109,47 @@ class FileWatcher implements Runnable {
 
 						monitor.incrementCounter("nr_files_processed_by_"
 								+ (isTransfer ? "transfer_watcher" : "reg_watcher"));
-					} catch (InterruptedException e) {
-						logger.log(Level.WARNING, "Intermediate watcher thread was interrupted while waiting");
+					}
+					catch (final InterruptedException e) {
+						logger.log(Level.WARNING, "Intermediate watcher thread was interrupted while waiting", e);
 					}
 				}
 			});
 			intermediateThread.setName("Watcher Thread II for " + directory.getAbsolutePath() + " directory");
+			intermediateThread.setDaemon(true);
 			intermediateThread.start();
 		}
 	}
 
 	void shutdown() {
-		for (Map.Entry<String, ScheduledThreadPoolExecutor> entry : executors.entrySet()) {
-			ScheduledThreadPoolExecutor executor = entry.getValue();
+		for (final Map.Entry<String, ScheduledThreadPoolExecutor> entry : executors.entrySet()) {
+			final ScheduledThreadPoolExecutor executor = entry.getValue();
 			executor.shutdown();
 			try {
 				executor.awaitTermination(30, TimeUnit.SECONDS);
-			} catch (InterruptedException e) {
+			}
+			catch (final InterruptedException e) {
 				logger.log(Level.WARNING,
 						"Caught interrupted exception while trying to shutdown an executor", e.getMessage());
 			}
 		}
+
+		if (intermediateThread != null)
+			intermediateThread.interrupt();
+
+		if (myself != null)
+			myself.interrupt();
 	}
 
-	private void addFilesToSend(String sourceDirPath) {
+	private void addFilesToSend(final String sourceDirPath) {
 		int i;
-		File dir = new File(sourceDirPath);
-		File[] files = dir.listFiles();
+		final File dir = new File(sourceDirPath);
+		final File[] files = dir.listFiles();
 
 		assert files != null;
 		for (i = 0; i < files.length; i++) {
 			if (files[i].getName().endsWith(".done")) {
-				FileElement element = readMetadata(files[i]);
+				final FileElement element = readMetadata(files[i]);
 				if (element == null)
 					continue;
 				addElement(element);
@@ -132,8 +157,8 @@ class FileWatcher implements Runnable {
 		}
 	}
 
-	void addElement(FileElement element) {
-		ScheduledExecutorService executor = executors.computeIfAbsent(isTransfer ? element.getPriority() : "low", (k) -> {
+	void addElement(final FileElement element) {
+		final ScheduledExecutorService executor = executors.computeIfAbsent(isTransfer ? element.getPriority() : "low", (k) -> {
 			int nrThreads;
 
 			if (isTransfer)
@@ -142,7 +167,7 @@ class FileWatcher implements Runnable {
 			else
 				nrThreads = Main.spoolerProperties.geti("queue.reg.threads", Main.defaultRegistrationThreads);
 
-			ScheduledThreadPoolExecutor service = new ScheduledThreadPoolExecutor(nrThreads, (r) -> new Thread(r, k + "/" + isTransfer));
+			final ScheduledThreadPoolExecutor service = new ScheduledThreadPoolExecutor(nrThreads, (r) -> new Thread(r, k + "/" + isTransfer));
 			service.setKeepAliveTime(1L, TimeUnit.MINUTES);
 			service.allowCoreThreadTimeOut(true);
 
@@ -152,8 +177,8 @@ class FileWatcher implements Runnable {
 		executor.schedule(isTransfer ? new Spooler(element) : new Registrator(element), element.getDelay(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS);
 	}
 
-	private static String generateURL(String prefix, String period,
-			String run, String type, String filename) {
+	private static String generateURL(final String prefix, final String period,
+			final String run, final String type, final String filename) {
 
 		String url = "";
 
@@ -168,7 +193,7 @@ class FileWatcher implements Runnable {
 		return url;
 	}
 
-	private FileElement readMetadata(File file) {
+	private FileElement readMetadata(final File file) {
 		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority, TFOrbits;
 		long size, ctime, xxhash;
 		UUID guid;
@@ -176,14 +201,14 @@ class FileWatcher implements Runnable {
 		try (InputStream inputStream = new FileInputStream(file);
 				FileWriter writeFile = new FileWriter(file.getAbsolutePath(), true)) {
 
-			ExtProperties prop = new ExtProperties(inputStream);
+			final ExtProperties prop = new ExtProperties(inputStream);
 
 			lurl = prop.gets("lurl", null);
 			run = prop.gets("run", null);
 			LHCPeriod = prop.gets("LHCPeriod", null);
 
 			if (lurl == null || run == null || LHCPeriod == null
-                    || lurl.isBlank() || run.isBlank() || LHCPeriod.isBlank()) {
+					|| lurl.isBlank() || run.isBlank() || LHCPeriod.isBlank()) {
 				logger.log(Level.WARNING, "Missing mandatory attributes in file: " + file.getAbsolutePath());
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path.replace("done", "invalid"));
@@ -192,9 +217,7 @@ class FileWatcher implements Runnable {
 			}
 
 			if (isTransfer && !Files.exists(Paths.get(lurl))) {
-				logger.log(Level.WARNING, "File " + lurl + " is no longer in "
-						+ Paths.get(lurl).getParent().toAbsolutePath()
-						+ " and will not be attempted furher.");
+				logger.log(Level.WARNING, "File " + lurl + " is no longer found on disk and will not be attempted furher.");
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path.replace("done", "missing"));
 				monitor.incrementCounter("error_files");
@@ -232,17 +255,19 @@ class FileWatcher implements Runnable {
 			if (size == 0) {
 				size = Files.size(Paths.get(lurl));
 				writeFile.write("size" + ": " + size + "\n");
-			} else if (isTransfer) {
-                long realSize = Files.size(Paths.get(lurl));
-                if (size != realSize) {
-                    logger.log(Level.WARNING, "Size of " + lurl
-                            + " is different than what the metadata indicates (" + size + " vs " + realSize + ")");
-					path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
-                    Main.moveFile(logger, file.getAbsolutePath(), path);
-					monitor.incrementCounter("error_files");
-                    return null;
-                }
 			}
+			else
+				if (isTransfer) {
+					final long realSize = Files.size(Paths.get(lurl));
+					if (size != realSize) {
+						logger.log(Level.WARNING, "Size of " + lurl
+								+ " is different than what the metadata indicates (" + size + " vs " + realSize + ")");
+						path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
+						Main.moveFile(logger, file.getAbsolutePath(), path);
+						monitor.incrementCounter("error_files");
+						return null;
+					}
+				}
 
 			if (ctime == 0) {
 				ctime = new File(lurl).lastModified();
@@ -282,7 +307,8 @@ class FileWatcher implements Runnable {
 				priority = "low";
 				writeFile.write("priority" + ": " + priority + "\n");
 			}
-		} catch (IOException e) {
+		}
+		catch (final IOException e) {
 			logger.log(Level.WARNING, "Could not read/write the metadata file " + file.getAbsolutePath(), e.getMessage());
 			path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 			Main.moveFile(logger, file.getAbsolutePath(), path);
