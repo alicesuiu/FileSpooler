@@ -1,8 +1,6 @@
 package spooler;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.text.DecimalFormat;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -11,7 +9,6 @@ import alien.catalogue.GUID;
 import alien.catalogue.GUIDUtils;
 import alien.catalogue.PFN;
 import alien.config.ConfigUtils;
-import alien.io.IOUtils;
 import alien.io.protocols.Xrootd;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
@@ -67,7 +64,7 @@ class Spooler implements Runnable {
 		return toTransfer;
 	}
 
-	private static void onSuccess(FileElement element, double transfer_time) {
+	private static void onSuccess(FileElement element, double transfer_time) throws IOException {
 		DecimalFormat formatter = new DecimalFormat("#.##");
         logger.log(Level.INFO, "Successfully transfered: "
 						+ element.getSurl()
@@ -89,15 +86,38 @@ class Spooler implements Runnable {
 			}
 		}
 
+		String destPath = Main.spoolerProperties.gets("registrationDir", Main.defaultRegistrationDir)
+				+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
+		String srcPath = element.getMetaFilePath();
+
+		if (element.getNrTries() != 0) {
+			String intermediatePath = destPath.replace("done", "meta");
+			String line;
+
+			try (BufferedReader br = new BufferedReader(new FileReader(srcPath));
+					FileWriter writer = new FileWriter(intermediatePath)) {
+				while ((line = br.readLine()) != null) {
+					if (line.contains("surl")) {
+						writer.write("surl" + ": " + element.getSurl() + "\n");
+					} else {
+						writer.write(line + "\n");
+					}
+				}
+			}
+
+			if (!new File(element.getMetaFilePath()).delete())
+				logger.log(Level.WARNING, "Could not delete old metadata file " + element.getMetaFilePath());
+
+			if (!new File(intermediatePath).renameTo(new File(destPath)))
+				logger.log(Level.WARNING, "Could not rename the metadata file " + intermediatePath);
+		} else {
+			Main.moveFile(logger, srcPath, destPath);
+		}
+
 		if (!element.getFile().delete()) {
 			logger.log(Level.WARNING, "Could not delete source file "
 					+ element.getFile().getAbsolutePath());
 		}
-
-		String destPath = Main.spoolerProperties.gets("registrationDir", Main.defaultRegistrationDir)
-				+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
-		String srcPath = element.getMetaFilePath();
-		Main.moveFile(logger, srcPath, destPath);
 	}
 
 	private static void onFail(FileElement element) {
@@ -154,14 +174,7 @@ class Spooler implements Runnable {
 		catch (IOException e) {
 			logger.log(Level.WARNING, "Transfer failed with exception for file: " + element.getSurl()
 					+ "\n" + e.getMessage());
-			if (e.getMessage().contains("Unable to overwrite existing file - you are write-once user ; " +
-					"File exists (destination)")) {
-				String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
-						+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
-				Main.moveFile(logger, element.getMetaFilePath(), path);
-				monitor.incrementCounter("error_files");
-			} else
-				onFail(element);
+			onFail(element);
 		}
 
 		return false;

@@ -138,7 +138,7 @@ class Registrator implements Runnable {
         if (status == HttpServletResponse.SC_BAD_REQUEST
 				|| status == HttpServletResponse.SC_FORBIDDEN
 				|| status == HttpServletResponse.SC_CONFLICT) {
-			String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
+			String path = Main.spoolerProperties.gets("errorRegDir", Main.defaultErrorRegDir)
 					+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
 			Main.moveFile(logger, element.getMetaFilePath(), path);
 			monitor.incrementCounter("error_files");

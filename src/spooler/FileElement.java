@@ -26,7 +26,7 @@ class FileElement implements Delayed {
     private long time;
     private String md5;
     private long xxhash;
-    private final String surl;
+    private String surl;
     private final String curl;
     private final long size;
     private final String run;
@@ -193,9 +193,20 @@ class FileElement implements Delayed {
     void computeDelay() {
         long delayTime;
 
+        Integer removeChars = Integer.toString(nrTries).length();
         nrTries += 1;
         delayTime = Math.min(1 << nrTries,
                 Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
+
+        String filename = surl.substring(0, surl.lastIndexOf('.'));
+        if (nrTries > 1) {
+            filename = filename.substring(0, filename.length() - removeChars);
+        } else {
+            filename += "_";
+        }
+        filename += nrTries;
+        String extension = surl.substring(surl.lastIndexOf(".") + 1);
+        surl = filename + "." + extension;
 
         logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
         time = System.currentTimeMillis() + delayTime * 1000;
@@ -245,7 +256,7 @@ class FileElement implements Delayed {
             if (!isMetadata) {
                 String path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir)
                        + metaFilePath.substring(metaFilePath.lastIndexOf('/'));
-                Main.moveFile(logger, metaFilePath, path);
+                Main.moveFile(logger, metaFilePath, path.replace("done", "missing"));
                 monitor.incrementCounter("error_files");
             }
             return false;

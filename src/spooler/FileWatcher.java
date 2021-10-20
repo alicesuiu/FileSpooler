@@ -13,10 +13,7 @@ import java.nio.file.WatchService;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,6 +35,7 @@ class FileWatcher implements Runnable {
 	private final File directory;
 	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
 	private final boolean isTransfer;
+	BlockingQueue<File> processNewFiles = new LinkedBlockingDeque<>();
 
 	FileWatcher(File directory, boolean isTransfer) {
 		this.directory = directory;
@@ -59,17 +57,7 @@ class FileWatcher implements Runnable {
 					File file = filePath.toFile();
 
 					if (file.getName().endsWith(".done")) {
-						FileElement element = readMetadata(file);
-						if (element == null)
-							continue;
-						addElement(element);
-
-						logger.log(Level.INFO, Thread.currentThread().getName()
-								+ " processed a number of " + nrFilesWatched.incrementAndGet() + " files");
-						logger.log(Level.INFO, "The file " + file.getAbsolutePath() + " was queued");
-
-						monitor.incrementCounter("nr_files_processed_by_"
-								+ (isTransfer ? "transfer_watcher" : "reg_watcher"));
+						processNewFiles.put(file);
 					}
 				}
 
@@ -88,7 +76,30 @@ class FileWatcher implements Runnable {
 			Thread thread = new Thread(this);
 			thread.setDaemon(true);
 			thread.start();
-			thread.setName("Watcher Thread for " + directory.getAbsolutePath() + " directory");
+			thread.setName("Watcher Thread I for " + directory.getAbsolutePath() + " directory");
+
+			Thread intermediateThread = new Thread(() -> {
+				while (Main.shouldRun) {
+					try {
+						File file = processNewFiles.take();
+						FileElement element = readMetadata(file);
+						if (element == null)
+							continue;
+						addElement(element);
+
+						logger.log(Level.INFO, Thread.currentThread().getName()
+								+ " processed a number of " + nrFilesWatched.incrementAndGet() + " files");
+						logger.log(Level.INFO, "The file " + file.getAbsolutePath() + " was queued");
+
+						monitor.incrementCounter("nr_files_processed_by_"
+								+ (isTransfer ? "transfer_watcher" : "reg_watcher"));
+					} catch (InterruptedException e) {
+						logger.log(Level.WARNING, "Intermediate watcher thread was interrupted while waiting");
+					}
+				}
+			});
+			intermediateThread.setName("Watcher Thread II for " + directory.getAbsolutePath() + " directory");
+			intermediateThread.start();
 		}
 	}
 
@@ -175,7 +186,7 @@ class FileWatcher implements Runnable {
                     || lurl.isBlank() || run.isBlank() || LHCPeriod.isBlank()) {
 				logger.log(Level.WARNING, "Missing mandatory attributes in file: " + file.getAbsolutePath());
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
-				Main.moveFile(logger, file.getAbsolutePath(), path);
+				Main.moveFile(logger, file.getAbsolutePath(), path.replace("done", "invalid"));
 				monitor.incrementCounter("error_files");
 				return null;
 			}
@@ -185,7 +196,7 @@ class FileWatcher implements Runnable {
 						+ Paths.get(lurl).getParent().toAbsolutePath()
 						+ " and will not be attempted furher.");
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
-				Main.moveFile(logger, file.getAbsolutePath(), path);
+				Main.moveFile(logger, file.getAbsolutePath(), path.replace("done", "missing"));
 				monitor.incrementCounter("error_files");
 				return null;
 			}
@@ -213,7 +224,7 @@ class FileWatcher implements Runnable {
 			if (!type.equals("raw") && !type.equals("calib")) {
 				logger.log(Level.WARNING, "Unsupported type: " + type + " for file: " + file.getAbsolutePath());
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
-				Main.moveFile(logger, file.getAbsolutePath(), path);
+				Main.moveFile(logger, file.getAbsolutePath(), path.replace("done", "invalid"));
 				monitor.incrementCounter("error_files");
 				return null;
 			}

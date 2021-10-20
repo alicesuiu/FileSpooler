@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,6 +47,7 @@ public class Main {
 	static final String defaultRegistrationDir = "/data/epn2eos_tool/daqSpool";
 	static final String defaultErrorDir = "/data/epn2eos_tool/error";
 	static final String defaultLogsDir = "/data/epn2eos_tool/logs";
+	static final String defaultErrorRegDir = "/data/epn2eos_tool/errorReg";
 	static final String defaultSEName = "ALICE::CERN::EOSALICEO2";
 	static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
 	static final boolean defaultMd5Enable = false;
@@ -57,7 +59,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.6";
+	private static final String version = "v.1.8";
 
 	/**
 	 * Entry point
@@ -70,15 +72,23 @@ public class Main {
 
         if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
             return;
-        logger.log(Level.INFO, "Metadata Dir Path: " + spoolerProperties.gets("metadataDir", defaultMetadataDir));
+        logger.log(Level.INFO, "Metadata Dir Path: "
+				+ spoolerProperties.gets("metadataDir", defaultMetadataDir));
 
         if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
             return;
-        logger.log(Level.INFO, "Registration Dir Path: " + spoolerProperties.gets("registrationDir", defaultRegistrationDir));
+        logger.log(Level.INFO, "Registration Dir Path: "
+				+ spoolerProperties.gets("registrationDir", defaultRegistrationDir));
 
         if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir))))
             return;
-        logger.log(Level.INFO, "Error Dir Path: " + spoolerProperties.gets("errorDir", defaultErrorDir));
+        logger.log(Level.INFO, "Error Dir Path for transfer: "
+				+ spoolerProperties.gets("errorDir", defaultErrorDir));
+
+        if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir))))
+        	return;
+        logger.log(Level.INFO, "Error Dir Path for registration: "
+				+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir));
 
         logger.log(Level.INFO, "Exponential Backoff Limit: " + spoolerProperties.geti("maxBackoff", defaultMaxBackoff));
 		logger.log(Level.INFO, "MD5 option: " + spoolerProperties.getb("md5Enable", defaultMd5Enable));
@@ -122,8 +132,17 @@ public class Main {
 			names.add("transfer_queued_files_size");
 			values.add(Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum()));
 
-			names.add("active_error_files");
-			values.add(Integer.valueOf(totalErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+			names.add("active_missing_error_files");
+			values.add(Integer.valueOf(missingErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+
+			names.add("active_invalid_error_files");
+			values.add(Integer.valueOf(invalidErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+
+			names.add("active_transfer_error_files");
+			values.add(Integer.valueOf(transferErrorFiles(new File(spoolerProperties.gets("errorDir", defaultErrorDir)))));
+
+			names.add("active_registration_error_files");
+			values.add(Integer.valueOf(registrationErrorFiles(new File(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))));
 
 			names.add("version");
 			values.add(version);
@@ -157,8 +176,26 @@ public class Main {
 		return sum;
 	}
 
-	private static int totalErrorFiles(File directory) {
-		return directory.isDirectory() ? directory.list().length : 0;
+	private static int missingErrorFiles(File directory) {
+		return (directory != null && directory.isDirectory()) ?
+			(int) Arrays.stream(directory.listFiles()).filter(f -> f.getName().endsWith("missing")).count()
+				: 0;
+	}
+
+	private static int invalidErrorFiles(File directory) {
+		return (directory != null && directory.isDirectory()) ?
+				(int) Arrays.stream(directory.listFiles()).filter(f -> f.getName().endsWith("invalid")).count()
+				: 0;
+	}
+
+	private static int transferErrorFiles(File directory) {
+		return (directory != null && directory.isDirectory()) ?
+				(int) Arrays.stream(directory.listFiles()).filter(f -> f.getName().endsWith("done")).count()
+				: 0;
+	}
+
+	private static int registrationErrorFiles(File directory) {
+		return (directory != null && directory.isDirectory()) ? directory.list().length : 0;
 	}
 
 	static boolean sanityCheckDir(Path path) {
