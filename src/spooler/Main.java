@@ -164,7 +164,10 @@ public class Main {
 			}
 
 			names.add("active_registration_error_files");
-			values.add(Integer.valueOf(registrationErrorFiles(new File(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))));
+			values.add(Integer.valueOf(totalFilesDir(new File(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))));
+
+			names.add("active_transfers_epn2eos_files");
+			values.add(Integer.valueOf(totalFilesDir(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir)))));
 
 			names.add("version");
 			values.add(version);
@@ -204,7 +207,7 @@ public class Main {
 		return sum;
 	}
 
-	private static int registrationErrorFiles(final File directory) {
+	private static int totalFilesDir(final File directory) {
 		if (directory != null && directory.isDirectory()) {
 			final String[] listing = directory.list();
 
