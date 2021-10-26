@@ -14,6 +14,9 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.sql.Timestamp;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
@@ -178,7 +181,7 @@ class FileWatcher implements Runnable {
 	}
 
 	private static String generateURL(final String prefix, final String period,
-			final String run, final String type, final String filename) {
+			final String run, final String type, final String filename, long ctime) {
 
 		String url = "";
 
@@ -186,8 +189,15 @@ class FileWatcher implements Runnable {
 		url += (new Date().getYear() + 1900) + "/";
 		url += period + "/";
 		url += run + "/";
-		url += type;
+		url += type + "/";
 
+		ctime = (ctime / (1000 * 60 * 10)) * (1000 * 60 * 10);
+		Timestamp ts = new Timestamp(ctime);
+		ZoneId z = ZoneId.of("Europe/Zurich");
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HHmm");
+		String dateTime = ts.toInstant().atZone(z).format(formatter);
+
+		url += dateTime;
 		url += filename;
 
 		return url;
@@ -283,13 +293,13 @@ class FileWatcher implements Runnable {
 
 			if (surl == null || surl.isBlank()) {
 				surl = generateURL("/" + type, LHCPeriod, run,
-						type, lurl.substring(lurl.lastIndexOf('/')));
+						type, lurl.substring(lurl.lastIndexOf('/')), ctime);
 				writeFile.write("surl" + ": " + surl + "\n");
 			}
 
 			if (curl == null || curl.isBlank()) {
 				curl = generateURL("/alice/data", LHCPeriod, run,
-						type, lurl.substring(lurl.lastIndexOf('/')));
+						type, lurl.substring(lurl.lastIndexOf('/')), ctime);
 				writeFile.write("curl" + ": " + curl + "\n");
 			}
 
@@ -315,6 +325,12 @@ class FileWatcher implements Runnable {
 			monitor.incrementCounter("error_files");
 			return null;
 		}
+
+		logger.log(Level.INFO, "Metadata attributes for: " + lurl + " "
+				+ "surl: " + surl + ", size: " + size + ", curl: " + curl
+				+ ", priority: " + priority + ", type: " + type + ", guid: " + guid
+				+ ", LHCPeriod: " + LHCPeriod + ", run: " + run + ", ctime: " + ctime
+				+ ", metadataFile: " + file.getAbsolutePath());
 
 		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
 				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons,
