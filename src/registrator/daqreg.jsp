@@ -52,7 +52,7 @@ if (
     !clientAddr.equals("128.141.19.252")		// alihlt-gw-prod.cern.ch
 ) {
 	lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?DENIED=" + clientAddr, 0, request);
-	logMessage("Client not authorized");
+	logMessage("Client not authorized: " + clientAddr);
 	response.sendError(HttpServletResponse.SC_FORBIDDEN, "Client not authorized");
 	return;
 }
@@ -71,13 +71,14 @@ final long size = rw.getl("size");
 final long ctime = rw.getl("ctime");
 String md5 = rw.gets("md5");
 String TFOrbits = rw.gets("TFOrbits");
+String hostname = rw.gets("hostname");
 
 // sanity check
 if (size <= 0 || surl.length() == 0
 		|| md5.length() == 0 || period.length() == 0
 		|| curl.length() == 0 || seName.length() == 0
 		|| seioDaemons.length() == 0 || ctime <= 0
-		|| TFOrbits.length() == 0) {
+		|| TFOrbits.length() == 0 || hostname.length() == 0) {
 	logMessage("Wrong parameters");
 	response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 	return;
@@ -88,6 +89,15 @@ if (md5.contains("missing"))
 
 if (TFOrbits.contains("missing"))
 	TFOrbits = null;
+
+if (hostname.contains("missing"))
+	hostname = null;
+
+String client;
+if (hostname == null)
+	client = clientAddr;
+else
+	client = hostname;
 
 final String pfn = seioDaemons + "/" + surl;
 final String msg = curl + ", " + pfn + ", " + guid + ", " + md5
@@ -117,7 +127,7 @@ if (idx > 0) {
 LFN existing = LFNUtils.getLFN(curl);
 
 if (existing != null) {
-	logMessage("File was already registered");
+	logMessage(client + ": File was already registered: " + curl);
 
 	if (existing.size != size)
 		response.sendError(HttpServletResponse.SC_CONFLICT, "File " + curl
@@ -133,17 +143,17 @@ else {
 		}
 	}
 	catch (Throwable t) {
-		logMessage("Caught exception: " + t.getMessage());
+		logMessage(client + ": Caught exception: " + t.getMessage());
 		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Caught exception : "
 		+ t + " (" + t.getMessage() + ")");
 	}
 
 	if (!done) {
-		logMessage("Registering failed for: " + msg);
+		logMessage(client + ": Registering failed for: " + msg);
 		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Registering by JAPI failed for:\n" + msg);
 	}
 	else {
-		logMessage("Successfuly registered for: " + msg);
+		logMessage(client + ": Successfuly registered for: " + msg);
 		response.setStatus(HttpServletResponse.SC_CREATED);
 	}
 }
@@ -176,27 +186,27 @@ if (TFOrbits != null) {
 if (db.geti(1) == 123) {
 	if (db.syncUpdateQuery(update)) {
 		if (db.getUpdateCount() == 0) {
-			logMessage("Repository: file existed with all details");
+			logMessage(client + ": Repository: file existed with all details: " + curl);
 			code = 1;
 		} else {
-			logMessage("Repository: file existed but was updated");
+			logMessage(client + ": Repository: file existed but was updated: " + curl);
 			code = 2;
 		}
 	} else {
-		logMessage("Repository: cannot update the existing file");
+		logMessage(client + ": Repository: cannot update the existing file: " + curl);
 		code = 3;
 	}
 } else {
 	if (db.syncUpdateQuery(insert)) {
 		if (db.getUpdateCount() == 0) {
-			logMessage("Repository: cannot insert new file");
+			logMessage(client + ": Repository: cannot insert new file: " + curl);
 			code = 4;
 		} else {
-			logMessage("Repository: new file successfully inserted");
+			logMessage(client + ": Repository: new file successfully inserted: " + curl);
 			code = 5;
 		}
 	} else {
-		logMessage("Repository: cannot insert new file");
+		logMessage(client + ": Repository: cannot insert new file: " + curl);
 		code = 6;
 	}
 }

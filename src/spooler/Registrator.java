@@ -3,9 +3,7 @@ package spooler;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -26,7 +24,7 @@ class Registrator implements Runnable {
 	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 	private final FileElement toRegister;
 
-	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg.jsp";
+	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg2.jsp";
 
 	Registrator(final FileElement toRegister) {
 		this.toRegister = toRegister;
@@ -46,7 +44,7 @@ class Registrator implements Runnable {
 		urlParam += encode("LHCPeriod") + "=" + encode(element.getLHCPeriod()) + "&";
 		urlParam += encode("guid") + "=" + encode(element.getGuid().toString()) + "&";
 		urlParam += encode("size") + "=" + encode(String.valueOf(element.getSize())) + "&";
-		urlParam += encode("ctime") + "=" + encode(String.valueOf(element.getCtime())) + "&";
+		urlParam += encode("ctime") + "=" + encode(String.valueOf(element.getCtime() / 1000)) + "&";
 
 		if (element.getMd5() == null)
 			urlParam += encode("md5") + "=" + encode("missing") + "&";
@@ -56,7 +54,13 @@ class Registrator implements Runnable {
 		if (element.getTFOrbits() == null)
 			urlParam += encode("TFOrbits") + "=" + encode("missing");
 		else
-			urlParam += encode("TFOrbits") + "=" + encode(element.getTFOrbits());
+			urlParam += encode("TFOrbits") + "=" + encode(element.getTFOrbits()) + "&";
+
+		try {
+			urlParam += encode("hostname") + "=" + encode(InetAddress.getLocalHost().getHostName());
+		} catch (@SuppressWarnings("unused") final UnknownHostException e) {
+			urlParam += encode("hostname") + "=" + encode("missing");
+		}
 
 		return urlParam;
 	}
