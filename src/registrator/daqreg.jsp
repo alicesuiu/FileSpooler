@@ -78,7 +78,7 @@ if (size <= 0 || surl.length() == 0
 		|| md5.length() == 0 || period.length() == 0
 		|| curl.length() == 0 || seName.length() == 0
 		|| seioDaemons.length() == 0 || ctime <= 0
-		|| TFOrbits.length() == 0 || hostname.length() == 0) {
+		|| TFOrbits.length() == 0) {
 	logMessage("Wrong parameters");
 	response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 	return;
