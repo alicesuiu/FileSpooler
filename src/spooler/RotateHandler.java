@@ -1,10 +1,10 @@
 package spooler;
 
+import alien.config.ConfigUtils;
+
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -37,12 +37,11 @@ public class RotateHandler extends StreamHandler {
 		currentDate = ZonedDateTime.now(z);
 		tomorrowStart = currentDate.toLocalDate().plusDays(1).atStartOfDay(z);
 
-		try {
-			prefixPath = "/home/jalien/epn2eos_logs/" + InetAddress.getLocalHost().getHostName();
-		}
-		catch (@SuppressWarnings("unused") final UnknownHostException e) {
+		String hostname = ConfigUtils.getLocalHostname();
+		if (hostname == null || hostname.isBlank())
 			prefixPath = Main.defaultLogsDir;
-		}
+		else
+			prefixPath = "/home/jalien/epn2eos_logs/" + hostname;
 
 		if (!Main.sanityCheckDir(Paths.get(prefixPath)))
 			return;

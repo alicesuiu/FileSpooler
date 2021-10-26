@@ -94,7 +94,7 @@ if (hostname.contains("missing"))
 	hostname = null;
 
 String client;
-if (hostname == null)
+if (hostname == null || hostname.isBlank())
 	client = clientAddr;
 else
 	client = hostname;

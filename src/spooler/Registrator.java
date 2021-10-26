@@ -56,11 +56,10 @@ class Registrator implements Runnable {
 		else
 			urlParam += encode("TFOrbits") + "=" + encode(element.getTFOrbits()) + "&";
 
-		try {
-			urlParam += encode("hostname") + "=" + encode(InetAddress.getLocalHost().getHostName());
-		} catch (@SuppressWarnings("unused") final UnknownHostException e) {
-			urlParam += encode("hostname") + "=" + encode("missing");
-		}
+		String hostname = ConfigUtils.getLocalHostname();
+		if (hostname == null)
+			hostname = "missing";
+		urlParam += encode("hostname") + "=" + encode(hostname);
 
 		return urlParam;
 	}
