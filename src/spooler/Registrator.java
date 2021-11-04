@@ -52,7 +52,7 @@ class Registrator implements Runnable {
 			urlParam += encode("md5") + "=" + encode(element.getMd5()) + "&";
 
 		if (element.getTFOrbits() == null)
-			urlParam += encode("TFOrbits") + "=" + encode("missing");
+			urlParam += encode("TFOrbits") + "=" + encode("missing") + "&";
 		else
 			urlParam += encode("TFOrbits") + "=" + encode(element.getTFOrbits()) + "&";
 
