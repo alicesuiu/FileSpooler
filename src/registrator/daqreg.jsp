@@ -7,6 +7,7 @@
 <%@ page import="java.util.Date" %>
 <%@ page import="java.io.PrintWriter" %>
 <%@ page import="java.io.FileWriter" %>
+<%@ page import="java.util.UUID" %>
 
 <%!private static final Object lock = new Object();
 	private static PrintWriter pwLog = null;
@@ -68,7 +69,7 @@ final String seioDaemons = rw.gets("seioDaemons");
 final String guid = rw.gets("guid").trim();
 final String period = rw.gets("LHCPeriod");
 final long size = rw.getl("size");
-final long ctime = rw.getl("ctime");
+long ctime = rw.getl("ctime");
 String md5 = rw.gets("md5");
 String TFOrbits = rw.gets("TFOrbits");
 String hostname = rw.gets("hostname");
@@ -77,11 +78,14 @@ String hostname = rw.gets("hostname");
 if (size <= 0 || surl.length() == 0
 		|| md5.length() == 0 || period.length() == 0
 		|| curl.length() == 0 || seName.length() == 0
-		|| seioDaemons.length() == 0 || ctime <= 0
-		|| TFOrbits.length() == 0) {
+		|| seioDaemons.length() == 0 || TFOrbits.length() == 0) {
 	logMessage("Wrong parameters");
 	response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 	return;
+}
+
+if (ctime <= 0) {
+	ctime = GUIDUtils.epochTime(UUID.fromString(guid));
 }
 
 if (md5.contains("missing"))
