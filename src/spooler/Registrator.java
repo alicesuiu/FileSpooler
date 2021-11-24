@@ -19,15 +19,14 @@ import alien.site.supercomputing.titan.Pair;
  * @author asuiu
  * @since August 24, 2021
  */
-class Registrator implements Runnable {
+class Registrator extends FileOperator {
 	private static final Logger logger = ConfigUtils.getLogger(Registrator.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
-	private final FileElement toRegister;
 
 	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg2.jsp";
 
-	Registrator(final FileElement toRegister) {
-		this.toRegister = toRegister;
+	Registrator(final FileElement element) {
+		super(element);
 	}
 
 	private static String encode(final String s) {
@@ -172,7 +171,7 @@ class Registrator implements Runnable {
 				+ Main.nrFilesOnRegister.incrementAndGet());
 
 		try {
-			register(toRegister);
+			register(getElement());
 		}
 		finally {
 			Main.nrFilesOnRegister.decrementAndGet();

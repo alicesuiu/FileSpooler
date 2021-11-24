@@ -20,14 +20,12 @@ import lazyj.Format;
  * @author asuiu
  * @since March 30, 2021
  */
-class Spooler implements Runnable {
+class Spooler extends FileOperator {
 	private static final Logger logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
 
-	private final FileElement toTransfer;
-
-	Spooler(FileElement toTransfer) {
-		this.toTransfer = toTransfer;
+	Spooler(FileElement element) {
+		super(element);
 	}
 
 	/*private static boolean checkDataIntegrity(FileElement element, String xxhash) {
@@ -59,10 +57,6 @@ class Spooler implements Runnable {
 
 		return fileXXHash.equals(xxhash);
 	}*/
-
-	public FileElement getToTransfer() {
-		return toTransfer;
-	}
 
 	private static void onSuccess(FileElement element, double transfer_time) throws IOException {
 		DecimalFormat formatter = new DecimalFormat("#.##");
@@ -185,7 +179,7 @@ class Spooler implements Runnable {
 		logger.log(Level.INFO, "Total number of files transmitted in parallel: "
 				+ Main.nrFilesOnSend.incrementAndGet());
 		try {
-			transfer(toTransfer);
+			transfer(getElement());
 		}
 		finally {
 			Main.nrFilesOnSend.decrementAndGet();

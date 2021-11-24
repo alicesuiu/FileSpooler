@@ -170,7 +170,7 @@ class FileWatcher implements Runnable {
 			else
 				nrThreads = Main.spoolerProperties.geti("queue.reg.threads", Main.defaultRegistrationThreads);
 
-			final ScheduledThreadPoolExecutor service = new ScheduledThreadPoolExecutor(nrThreads, (r) -> new Thread(r, k + "/" + isTransfer));
+			final FileScheduleExecutor service = new FileScheduleExecutor(nrThreads, (r) -> new Thread(r, k + "/" + isTransfer));
 			service.setKeepAliveTime(1L, TimeUnit.MINUTES);
 			service.allowCoreThreadTimeOut(true);
 

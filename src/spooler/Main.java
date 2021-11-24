@@ -58,7 +58,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.14";
+	private static final String version = "v.1.15";
 
 	/**
 	 * Entry point
@@ -198,9 +198,11 @@ public class Main {
 		long sum = 0;
 
 		final BlockingQueue<Runnable> queue = s.getQueue();
-		for (final Runnable spooler : queue) {
-			if (spooler instanceof Spooler) {
-				sum += ((Spooler) spooler).getToTransfer().getFile().length();
+		for (final Runnable future : queue) {
+			if (future instanceof FileScheduleFuture
+					&& ((FileScheduleFuture) future).getOperator() instanceof Spooler) {
+				Spooler spooler = (Spooler) ((FileScheduleFuture) future).getOperator();
+				sum +=  spooler.getElement().getFile().length();
 			}
 		}
 
