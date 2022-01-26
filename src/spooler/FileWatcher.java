@@ -255,7 +255,8 @@ class FileWatcher implements Runnable {
 			}
 
 			if (!type.equals("raw") && !type.equals("calib")) {
-				logger.log(Level.WARNING, "Unsupported type: " + type + " for file: " + file.getAbsolutePath());
+				logger.log(Level.WARNING, "Unsupported type: " + type + " for file: " + file.getAbsolutePath() +
+						"Type can only be raw or calib");
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path.replace("done", "invalid"));
 				monitor.incrementCounter("error_files");

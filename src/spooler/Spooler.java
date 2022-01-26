@@ -158,7 +158,14 @@ class Spooler extends FileOperator {
 			double transfer_time = 0;
 
 			try (Timing t = new Timing(monitor, "transfer_execution_time")) {
-				new Xrootd().put(pfn, element.getFile(), false);
+				Xrootd xrootd =  new Xrootd();
+				xrootd.put(pfn, element.getFile(), false);
+				String md5Output = xrootd.getMd5Value();
+				if (md5Output != null && element.getMd5() == null) {
+					element.setMd5(md5Output);
+					logger.log(Level.INFO, "MD5 checksum for the file " + element.getSurl()
+							+ " is " + element.getMd5());
+				}
 				transfer_time = t.getSeconds();
 			}
 
