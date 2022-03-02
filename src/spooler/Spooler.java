@@ -140,7 +140,8 @@ class Spooler extends FileOperator {
 				element.getSeioDaemons(),
 				null,
 				true,
-				null);
+				null,
+				0);
 
 		if (!metadataFile.existFile())
 			return;

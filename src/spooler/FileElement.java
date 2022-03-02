@@ -40,6 +40,7 @@ class FileElement implements Delayed {
 	private final String priority;
 	private final boolean isMetadata;
 	private final String TFOrbits;
+	private final int persistent;
 
 	private static final Logger logger = ConfigUtils.getLogger(FileElement.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(FileElement.class.getCanonicalName());
@@ -47,7 +48,8 @@ class FileElement implements Delayed {
 	FileElement(final String md5, final String surl, final long size, final String run,
 			final UUID guid, final long ctime, final String LHCPeriod, final String metaFilePath,
 			final long xxhash, final String lurl, final String type, final String curl, final String seName,
-			final String seioDaemons, final String priority, final boolean isMetadata, final String TFOrbits) {
+			final String seioDaemons, final String priority, final boolean isMetadata, final String TFOrbits,
+				final int persistent) {
 		this.md5 = md5;
 		this.surl = surl;
 		this.curl = curl;
@@ -64,6 +66,7 @@ class FileElement implements Delayed {
 		this.priority = priority;
 		this.isMetadata = isMetadata;
 		this.TFOrbits = TFOrbits;
+		this.persistent = persistent;
 		nrTries = 0;
 		time = System.currentTimeMillis();
 		file = new File(lurl);
@@ -139,6 +142,10 @@ class FileElement implements Delayed {
 
 	public String getTFOrbits() {
 		return TFOrbits;
+	}
+
+	public int getPersistent() {
+		return persistent;
 	}
 
 	boolean isMetadata() {

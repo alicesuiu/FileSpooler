@@ -10,10 +10,13 @@ import java.util.logging.Logger;
 import javax.servlet.http.HttpServletResponse;
 
 import alien.catalogue.GUIDUtils;
+import alien.catalogue.LFN;
+import alien.catalogue.LFNUtils;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.site.supercomputing.titan.Pair;
+import utils.ExpireTime;
 
 /**
  * @author asuiu
@@ -102,6 +105,11 @@ class Registrator extends FileOperator {
 				+ Main.nrDataFilesReg.get());
 		monitor.incrementCacheHits("data_registered_files");
 
+		LFN lfn = LFNUtils.getLFN(element.getCurl());
+		ExpireTime expTime = new ExpireTime();
+		expTime.setDays(element.getPersistent());
+		LFNUtils.setExpireTime(lfn, expTime, false);
+
 		if (!new File(element.getMetaFilePath()).delete())
 			logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());
 	}
@@ -132,7 +140,8 @@ class Registrator extends FileOperator {
 				element.getSeioDaemons(),
 				null,
 				true,
-				null);
+				null,
+				0);
 
 		if (!metadataFile.existFile())
 			return;

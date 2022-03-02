@@ -207,6 +207,7 @@ class FileWatcher implements Runnable {
 		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority, TFOrbits;
 		long size, ctime, xxhash;
 		UUID guid;
+		int persistent;
 
 		try (InputStream inputStream = new FileInputStream(file);
 				FileWriter writeFile = new FileWriter(file.getAbsolutePath(), true)) {
@@ -248,6 +249,7 @@ class FileWatcher implements Runnable {
 			seioDaemons = prop.gets("seioDaemons", null);
 			priority = prop.gets("priority", null);
 			TFOrbits = prop.gets("TFOrbits", null);
+			persistent = prop.geti("persistent", 0);
 
 			if (type == null || type.isBlank()) {
 				type = "raw";
@@ -318,6 +320,12 @@ class FileWatcher implements Runnable {
 				priority = "low";
 				writeFile.write("priority" + ": " + priority + "\n");
 			}
+
+			/* global run -> persistent = 90 days */
+			if (persistent == 0 && !LHCPeriod.contains("_")) {
+				persistent = 90;
+				writeFile.write("expirationTime" + ": " + persistent + "\n");
+			}
 		}
 		catch (final IOException e) {
 			logger.log(Level.WARNING, "Could not read/write the metadata file " + file.getAbsolutePath(), e.getMessage());
@@ -335,6 +343,6 @@ class FileWatcher implements Runnable {
 
 		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
 				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons,
-				priority, false, TFOrbits);
+				priority, false, TFOrbits, persistent);
 	}
 }
