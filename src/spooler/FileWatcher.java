@@ -324,7 +324,7 @@ class FileWatcher implements Runnable {
 			/* global run -> persistent = 90 days */
 			if (persistent == 0 && !LHCPeriod.contains("_")) {
 				persistent = 90;
-				writeFile.write("expirationTime" + ": " + persistent + "\n");
+				writeFile.write("persistent" + ": " + persistent + "\n");
 			}
 		}
 		catch (final IOException e) {
