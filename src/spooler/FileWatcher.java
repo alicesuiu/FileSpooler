@@ -320,12 +320,6 @@ class FileWatcher implements Runnable {
 				priority = "low";
 				writeFile.write("priority" + ": " + priority + "\n");
 			}
-
-			/* global run -> persistent = 90 days */
-			if (persistent == 0 && !LHCPeriod.contains("_")) {
-				persistent = 90;
-				writeFile.write("persistent" + ": " + persistent + "\n");
-			}
 		}
 		catch (final IOException e) {
 			logger.log(Level.WARNING, "Could not read/write the metadata file " + file.getAbsolutePath(), e.getMessage());

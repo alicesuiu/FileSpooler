@@ -26,7 +26,7 @@ class Registrator extends FileOperator {
 	private static final Logger logger = ConfigUtils.getLogger(Registrator.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 
-	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg2.jsp";
+	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg3.jsp";
 
 	Registrator(final FileElement element) {
 		super(element);
@@ -61,7 +61,12 @@ class Registrator extends FileOperator {
 		String hostname = ConfigUtils.getLocalHostname();
 		if (hostname == null)
 			hostname = "missing";
-		urlParam += encode("hostname") + "=" + encode(hostname);
+		urlParam += encode("hostname") + "=" + encode(hostname) + "&";
+
+		if (element.getPersistent() == 0)
+			urlParam += encode("persistent") + "=" + encode("missing");
+		else
+			urlParam += encode("persistent") + "=" + encode(String.valueOf(element.getPersistent()));
 
 		return urlParam;
 	}
@@ -104,11 +109,6 @@ class Registrator extends FileOperator {
 		logger.log(Level.INFO, "Total number of data files successfully registered: "
 				+ Main.nrDataFilesReg.get());
 		monitor.incrementCacheHits("data_registered_files");
-
-		LFN lfn = LFNUtils.getLFN(element.getCurl());
-		ExpireTime expTime = new ExpireTime();
-		expTime.setDays(element.getPersistent());
-		LFNUtils.setExpireTime(lfn, expTime, false);
 
 		if (!new File(element.getMetaFilePath()).delete())
 			logger.log(Level.WARNING, "Could not delete metadata file " + element.getMetaFilePath());

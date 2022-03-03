@@ -8,6 +8,7 @@
 <%@ page import="java.io.PrintWriter" %>
 <%@ page import="java.io.FileWriter" %>
 <%@ page import="java.util.UUID" %>
+<%@ page import="utils.ExpireTime" %>
 
 <%!private static final Object lock = new Object();
 	private static PrintWriter pwLog = null;
@@ -73,12 +74,14 @@ long ctime = rw.getl("ctime");
 String md5 = rw.gets("md5");
 String TFOrbits = rw.gets("TFOrbits");
 String hostname = rw.gets("hostname");
+String persistent = rw.gets("persistent");
 
 // sanity check
 if (size <= 0 || surl.length() == 0
 		|| md5.length() == 0 || period.length() == 0
 		|| curl.length() == 0 || seName.length() == 0
-		|| seioDaemons.length() == 0 || TFOrbits.length() == 0) {
+		|| seioDaemons.length() == 0 || TFOrbits.length() == 0
+		|| persistent.length() == 0) {
 	logMessage("Wrong parameters");
 	response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 	return;
@@ -96,6 +99,9 @@ if (TFOrbits.contains("missing"))
 
 if (hostname.contains("missing"))
 	hostname = null;
+
+if (persistent.contains("missing"))
+	persistent = null;
 
 String client;
 if (hostname == null || hostname.isBlank())
@@ -160,6 +166,13 @@ else {
 		logMessage(client + ": Successfuly registered for: " + msg);
 		response.setStatus(HttpServletResponse.SC_CREATED);
 	}
+}
+
+if (persistent != null) {
+	LFN lfn = LFNUtils.getLFN(curl);
+	ExpireTime expTime = new ExpireTime();
+	expTime.setDays(Integer.parseInt(persistent));
+	LFNUtils.setExpireTime(lfn, expTime, false);
 }
 
 int code;
