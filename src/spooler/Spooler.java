@@ -166,6 +166,9 @@ class Spooler extends FileOperator {
 					element.setMd5(md5Output);
 					logger.log(Level.INFO, "MD5 checksum for the file " + element.getSurl()
 							+ " is " + element.getMd5());
+					try (FileWriter writeFile = new FileWriter(element.getMetaFilePath(), true)) {
+						writeFile.write("md5" + ": " + md5Output + "\n");
+					}
 				}
 				transfer_time = t.getSeconds();
 			}
