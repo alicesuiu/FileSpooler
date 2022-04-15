@@ -147,6 +147,7 @@ class Spooler extends FileOperator {
 			return;
 
 		element.computeDelay();
+		element.updateSurlOnFailedTransfer();
 		Main.transferWatcher.addElement(element);
 	}
 

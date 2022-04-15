@@ -10,13 +10,11 @@ import java.util.logging.Logger;
 import javax.servlet.http.HttpServletResponse;
 
 import alien.catalogue.GUIDUtils;
-import alien.catalogue.LFN;
-import alien.catalogue.LFNUtils;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.site.supercomputing.titan.Pair;
-import utils.ExpireTime;
+
 
 /**
  * @author asuiu

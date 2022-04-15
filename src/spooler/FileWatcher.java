@@ -204,7 +204,8 @@ class FileWatcher implements Runnable {
 	}
 
 	private FileElement readMetadata(final File file) {
-		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName, seioDaemons, path, priority, TFOrbits;
+		String surl, run, LHCPeriod, md5, uuid, lurl, curl, type, seName,
+				seioDaemons, path, priority, TFOrbits, det_composition;
 		long size, ctime, xxhash;
 		UUID guid;
 		int persistent;
@@ -250,6 +251,7 @@ class FileWatcher implements Runnable {
 			priority = prop.gets("priority", null);
 			TFOrbits = prop.gets("TFOrbits", null);
 			persistent = prop.geti("persistent", 0);
+			det_composition = prop.gets("det_composition", null);
 
 			if (type == null || type.isBlank()) {
 				type = "raw";
@@ -293,6 +295,16 @@ class FileWatcher implements Runnable {
 			}
 			else
 				guid = UUID.fromString(uuid);
+
+			/* the detector list contains a single detector
+			 * example:
+			 * det_composition: TPC
+			 * LHCPeriod: OCT
+			 */
+			if (det_composition != null && !det_composition.contains(",") && !LHCPeriod.contains("_")) {
+				LHCPeriod = LHCPeriod + "_" + det_composition;
+				LHCPeriod = LHCPeriod.replaceAll("[\\n\\t ]", "");
+			}
 
 			if (surl == null || surl.isBlank()) {
 				surl = generateURL("/" + type, LHCPeriod, run,

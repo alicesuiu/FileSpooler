@@ -200,10 +200,16 @@ class FileElement implements Delayed {
 	void computeDelay() {
 		long delayTime;
 
-		final int removeChars = String.valueOf(nrTries).length();
 		nrTries += 1;
 		delayTime = Math.min(1 << nrTries,
 				Main.spoolerProperties.geti("maxBackoff", Main.defaultMaxBackoff));
+		logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
+		time = System.currentTimeMillis() + delayTime * 1000;
+		logger.log(Level.INFO, "The transmission time of the file is: " + time);
+	}
+
+	void updateSurlOnFailedTransfer() {
+		final int removeChars = String.valueOf(nrTries - 1).length();
 
 		String filename = surl.substring(0, surl.lastIndexOf('.'));
 		if (nrTries > 1) {
@@ -215,10 +221,6 @@ class FileElement implements Delayed {
 		filename += nrTries;
 		final String extension = surl.substring(surl.lastIndexOf(".") + 1);
 		surl = filename + "." + extension;
-
-		logger.log(Level.INFO, "The delay time of the file is: " + delayTime);
-		time = System.currentTimeMillis() + delayTime * 1000;
-		logger.log(Level.INFO, "The transmission time of the file is: " + time);
 	}
 
 	void computeMD5() {
