@@ -1,4 +1,4 @@
-package metadata_tool;
+package analyzer;
 
 import alien.io.xrootd.XrootdFile;
 import alien.io.xrootd.XrootdListing;
@@ -20,7 +20,7 @@ public class ListingThread implements Runnable {
         while(!dirs.isEmpty()) {
             try {
                 XrootdFile dir = dirs.take();
-                String fileName = Main.getFileName(dir.getName(), Main.getParentName(dir.path));
+                String fileName = ListingUtils.getFileName(dir.getName(), ListingUtils.getParentName(dir.path));
                 try (FileWriter writer = new FileWriter(fileName, true)) {
                     listAll(dir.path, writer);
                 } catch (IOException e) {
@@ -33,7 +33,7 @@ public class ListingThread implements Runnable {
     }
 
     private static void listAll(String path, FileWriter writer) throws IOException {
-        XrootdListing listing = new XrootdListing(Main.server, path, null);
+        XrootdListing listing = new XrootdListing(ListingMain.server, path, null);
         Set<XrootdFile> directories = listing.getDirs();
         Set<XrootdFile> files = listing.getFiles();
 
