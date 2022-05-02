@@ -1,0 +1,52 @@
+package metacreator;
+
+import alien.config.ConfigUtils;
+import alien.io.xrootd.XrootdFile;
+import alien.io.xrootd.XrootdListing;
+
+import java.io.IOException;
+import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+public class ListingThread implements Runnable {
+    private BlockingQueue<String> dirs;
+    private BlockingQueue<XrootdFile> files;
+    private String server = Main.metacreatorProperties.gets("seioDaemons", Main.defaultseioDaemons)
+            .substring(Main.metacreatorProperties.gets("seioDaemons",
+                    Main.defaultseioDaemons).lastIndexOf('/') + 1);
+    private static Logger logger = ConfigUtils.getLogger(ListingThread.class.getCanonicalName());
+
+    ListingThread(BlockingQueue<String> dirs, BlockingQueue<XrootdFile> files) {
+        this.dirs = dirs;
+        this.files = files;
+    }
+
+    @Override
+    public void run() {
+        while(true) {
+            try {
+                String path = dirs.take();
+                logger.log(Level.INFO, "Listing dir: " + path);
+                addFiles(path);
+            } catch (InterruptedException | IOException e) {
+                logger.log(Level.WARNING, "Caught exception in listing thread!", e);
+            }
+        }
+    }
+
+     private void addFiles(String path) throws IOException {
+        XrootdListing listing = new XrootdListing(server, path);
+        Set<XrootdFile> directories = listing.getDirs();
+        Set<XrootdFile> listFiles = listing.getFiles();
+
+        for (XrootdFile file : listFiles) {
+            files.add(file);
+        }
+
+        for (XrootdFile dir : directories) {
+            addFiles(dir.path);
+        }
+    }
+}
