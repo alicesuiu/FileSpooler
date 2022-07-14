@@ -3,6 +3,9 @@ package metacreator;
 import alien.config.ConfigUtils;
 import alien.io.xrootd.XrootdFile;
 import alien.io.xrootd.XrootdListing;
+import alien.monitoring.Monitor;
+import alien.monitoring.MonitorFactory;
+import alien.monitoring.Timing;
 
 import java.io.IOException;
 import java.util.Set;
@@ -17,6 +20,7 @@ public class ListingThread implements Runnable {
             .substring(Main.metacreatorProperties.gets("seioDaemons",
                     Main.defaultseioDaemons).lastIndexOf('/') + 1);
     private static Logger logger = ConfigUtils.getLogger(ListingThread.class.getCanonicalName());
+    private static final Monitor monitor = MonitorFactory.getMonitor(ListingThread.class.getCanonicalName());
 
     ListingThread(BlockingQueue<String> dirs, BlockingQueue<XrootdFile> files) {
         this.dirs = dirs;
@@ -25,11 +29,13 @@ public class ListingThread implements Runnable {
 
     @Override
     public void run() {
-        while(true) {
+        while(!dirs.isEmpty()) {
             try {
                 String path = dirs.take();
                 logger.log(Level.INFO, "Listing dir: " + path);
-                addFiles(path);
+                try (Timing t = new Timing(monitor, "listing_execution_time")) {
+                    addFiles(path);
+                }
             } catch (InterruptedException | IOException e) {
                 logger.log(Level.WARNING, "Caught exception in listing thread!", e);
             }
@@ -43,6 +49,7 @@ public class ListingThread implements Runnable {
 
         for (XrootdFile file : listFiles) {
             files.add(file);
+            Main.nrFilesProcessed.getAndIncrement();
         }
 
         for (XrootdFile dir : directories) {

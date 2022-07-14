@@ -3,7 +3,7 @@ build_spooler:
 	cp -r config ./out_spooler
 
 build_metadata_tool:
-	javac -cp ./libs/alien-cs_v1.4.3.jar -d ./out_metadata_tool ./src/metacreator/*.java
+	javac -cp ./libs/alien-cs_v1.4.5.jar -d ./out_metadata_tool ./src/metacreator/*.java
 	cp -r config ./out_metadata_tool
 
 build_analyzer:

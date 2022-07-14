@@ -2,6 +2,8 @@ package metacreator;
 
 import alien.config.ConfigUtils;
 import alien.io.xrootd.XrootdFile;
+import alien.monitoring.Monitor;
+import alien.monitoring.MonitorFactory;
 import lazyj.ExtProperties;
 
 import java.io.*;
@@ -19,16 +21,18 @@ public class Main {
     static ExtProperties metacreatorProperties;
     static final String defaultSEName = "ALICE::CERN::EOSALICEO2";
     static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
-    private static final String defaultProcessFilesPath = "/home/jalien/metadata_tool/process_files";
-    static final String defaultMetadataDir = "/home/jalien/metadata_tool/metaDir";
+    private static final String defaultProcessFilesPath = "/data/metadata_tool/process_files";
+    static final String defaultMetadataDir = "/data/metadata_tool/metaDir";
     static final String defaultRegistrationDir = "/data/epn2eos_tool/daqSpool";
     private static final int defaultThreads = 4;
     private static BlockingQueue<XrootdFile> processFiles = new LinkedBlockingQueue<>();
     private static BlockingQueue<String> listDirs = new LinkedBlockingQueue<>();
     private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
+    private static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
     static AtomicInteger nrFilesCreated = new AtomicInteger(0);
+    static AtomicInteger nrFilesProcessed = new AtomicInteger(0);
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         File processFile;
         metacreatorProperties = ConfigUtils.getConfiguration("metacreator");
 
@@ -65,6 +69,11 @@ public class Main {
                     + metacreatorProperties.gets("processFiles", defaultProcessFilesPath), e);
         }
 
+        monitor.addMonitoring("main", (names, values) -> {
+                names.add("process_queue_size");
+                values.add(Integer.valueOf(processFiles.size()));
+        });
+
         Thread[] listingThreads = new Thread[metacreatorProperties.geti("queue.list.threads", defaultThreads)];
         for (int i = 0; i < metacreatorProperties.geti("queue.list.threads", defaultThreads); i++) {
             listingThreads[i] = new Thread(new ListingThread(listDirs, processFiles));
@@ -77,6 +86,15 @@ public class Main {
             processThreads[i].start();
         }
 
+        for (int i = 0; i < metacreatorProperties.geti("queue.list.threads", defaultThreads); i++)
+            listingThreads[i].join();
+
+
+        while (nrFilesProcessed.get() > 0) {
+            Thread.sleep(1000);
+        }
+
+        System.exit(0);
     }
 
     private static boolean sanityCheckDir(final Path path) {
