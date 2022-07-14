@@ -1,5 +1,5 @@
 build_spooler:
-	javac -cp ./libs/alien-cs_v1.4.3.jar -d ./out_spooler ./src/spooler/*.java
+	javac -cp ./libs/alien-cs_v1.4.6.jar -d ./out_spooler ./src/spooler/*.java
 	cp -r config ./out_spooler
 
 build_metadata_tool:
@@ -30,4 +30,4 @@ deploy_registrator:
 	cp ./src/registrator/daqreg.jsp ../tomcat/webapps/ROOT
 
 clean:
-	rm -rf ./out_spooler ./out_metadata_tool spooler.jar metacreator.jar
+	rm -rf ./out_spooler ./out_metadata_tool ./out_analyzer_tool spooler.jar metacreator.jar analyzer.jar

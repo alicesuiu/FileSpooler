@@ -58,7 +58,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.18";
+	private static final String version = "v.1.20";
 
 	/**
 	 * Entry point

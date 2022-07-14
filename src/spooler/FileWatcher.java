@@ -258,6 +258,10 @@ class FileWatcher implements Runnable {
 				writeFile.write("type" + ": " + type + "\n");
 			}
 
+			if (type.equals("calibration")) {
+				type = "calib";
+			}
+
 			if (!type.equals("raw") && !type.equals("calib")) {
 				logger.log(Level.WARNING, "Unsupported type: " + type + " for file: " + file.getAbsolutePath() +
 						"Type can only be raw or calib");
