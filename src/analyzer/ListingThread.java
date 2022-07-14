@@ -2,16 +2,19 @@ package analyzer;
 
 import alien.io.xrootd.XrootdFile;
 import alien.io.xrootd.XrootdListing;
+import alien.site.supercomputing.titan.Pair;
 
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 
 public class ListingThread implements Runnable {
-    private BlockingQueue<XrootdFile> dirs;
+    private String server = Main.listingProperties.gets("seioDaemons", Main.defaultseioDaemons)
+            .substring(Main.listingProperties.gets("seioDaemons",
+                    Main.defaultseioDaemons).lastIndexOf('/') + 1);
+    private BlockingQueue<String> dirs;
 
-    ListingThread(BlockingQueue<XrootdFile> dirs) {
+    ListingThread(BlockingQueue<String> dirs) {
         this.dirs = dirs;
     }
 
@@ -19,34 +22,33 @@ public class ListingThread implements Runnable {
     public void run() {
         while(!dirs.isEmpty()) {
             try {
-                XrootdFile dir = dirs.take();
-                String fileName = ListingUtils.getFileName(dir.getName(), ListingUtils.getParentName(dir.path));
-                try (FileWriter writer = new FileWriter(fileName, true)) {
-                    listAll(dir.path, writer);
-                } catch (IOException e) {
-                    System.out.println("Caught exception while writing into the file." + e.getMessage());
-                }
-            } catch (InterruptedException e) {
+                String dir = dirs.take();
+                Pair<Integer, Long> stats =  scanFiles(dir);
+                System.out.println("Dir path: " + dir + " size: " + stats.getSecond() + " files: " + stats.getFirst());
+            } catch (InterruptedException | IOException e) {
                 System.out.println("Thread was interrupted");
             }
         }
     }
 
-    private static void listAll(String path, FileWriter writer) throws IOException {
-        XrootdListing listing = new XrootdListing(ListingMain.server, path, null);
+    private Pair<Integer, Long> scanFiles(String path) throws IOException {
+        XrootdListing listing = new XrootdListing(server, path);
         Set<XrootdFile> directories = listing.getDirs();
-        Set<XrootdFile> files = listing.getFiles();
+        Set<XrootdFile> listFiles = listing.getFiles();
+        int nr_files = 0;
+        long nr_bytes = 0L;
 
-        for (XrootdFile f : files) {
-            writer.write(f.path + ", " + f.size + "\n");
-        }
-
-        if (directories.isEmpty()) {
-            return;
+        for (XrootdFile file : listFiles) {
+            nr_files += 1;
+            nr_bytes += file.size;
         }
 
         for (XrootdFile dir : directories) {
-            listAll(dir.path, writer);
+            Pair<Integer, Long> stats =  scanFiles(dir.path);
+            nr_files += stats.getFirst();
+            nr_bytes += stats.getSecond();
         }
+
+        return new Pair<>(nr_files, nr_bytes);
     }
 }

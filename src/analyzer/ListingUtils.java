@@ -10,13 +10,13 @@ import java.nio.file.Paths;
 import java.util.Set;
 
 class ListingUtils {
-    static String getParentName(String path) {
+    /*static String getParentName(String path) {
         Path parent = Paths.get(path).getParent();
         return parent.getName(parent.getNameCount() - 1).toString();
     }
 
     static String getFileName(String dirName, String parent) {
-        String localFile = ListingMain.listingProperties.gets("localFile", ListingMain.defaultLocalFile);
+        String localFile = Main.listingProperties.gets("localFile", Main.defaultLocalFile);
         String name = localFile.substring(0, localFile.lastIndexOf('.')) + "-";
         name += (parent  != null) ? (parent + "-" + dirName) : dirName;
         String extension = localFile.substring(localFile.lastIndexOf(".") + 1);
@@ -24,7 +24,7 @@ class ListingUtils {
     }
 
     static Set<XrootdFile> getFirstDirs(String path, String fileName) throws IOException {
-        XrootdListing listing = new XrootdListing(ListingMain.server, path, null);
+        XrootdListing listing = new XrootdListing(Main.server, path, null);
         Set<XrootdFile> files = listing.getFiles();
 
         if (!files.isEmpty()) {
@@ -36,5 +36,5 @@ class ListingUtils {
         }
 
         return listing.getDirs();
-    }
+    }*/
 }

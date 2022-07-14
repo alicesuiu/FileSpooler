@@ -6,6 +6,10 @@ build_metadata_tool:
 	javac -cp ./libs/alien-cs_v1.4.3.jar -d ./out_metadata_tool ./src/metacreator/*.java
 	cp -r config ./out_metadata_tool
 
+build_analyzer:
+	javac -cp ./libs/alien-cs_v1.4.5.jar -d ./out_analyzer_tool ./src/analyzer/*.java
+	cp -r config ./out_analyzer_tool
+
 run_spooler:
 	java -cp ./libs/alien-cs_v1.4.2.jar:spooler.jar -DAliEnConfig=../jalien-setup/volume/ spooler.Main
 
@@ -14,6 +18,9 @@ jar_spooler:
 
 jar_metadata_tool:
 	cd out_metadata_tool && jar cvf ../metacreator.jar * && cd ..
+
+jar_analyzer_tool:
+	cd out_analyzer_tool && jar cvf ../analyzer.jar * && cd ..
 
 deploy_spooler:
 	cp ./spooler.jar ../jalien-setup/volume
