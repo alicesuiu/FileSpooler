@@ -67,6 +67,27 @@ class Spooler extends FileOperator {
 						+ " in " + formatter.format(transfer_time) + "s");
         monitor.addMeasurement("nr_transmitted_bytes", element.getSize());
 
+        if (element.getType().equalsIgnoreCase("raw")) {
+        	monitor.addMeasurement("data_RAW_total", element.getSize());
+
+        	if (element.getSurl().contains(".root"))
+        		monitor.addMeasurement("data_RAW_root", element.getSize());
+        	else if (element.getSurl().contains(".tf"))
+        		monitor.addMeasurement("data_RAW_tf", element.getSize());
+		} else if (element.getType().equalsIgnoreCase("calib")) {
+        	monitor.addMeasurement("data_CALIB_total", element.getSize());
+
+			if (element.getSurl().contains(".root"))
+				monitor.addMeasurement("data_CALIB_root", element.getSize());
+			else if (element.getSurl().contains(".tf"))
+				monitor.addMeasurement("data_CALIB_tf", element.getSize());
+		}
+
+        if (element.getSurl().contains(".root"))
+        	monitor.addMeasurement("data_total_root", element.getSize());
+        else if (element.getSurl().contains(".tf"))
+        	monitor.addMeasurement("data_total_tf", element.getSize());
+
 		Main.nrDataFilesSent.getAndIncrement();
 		logger.log(Level.INFO, "Total number of data files successfully transferred: "
 				+ Main.nrDataFilesSent.get());
