@@ -254,17 +254,19 @@ class FileWatcher implements Runnable {
 			det_composition = prop.gets("det_composition", null);
 
 			if (type == null || type.isBlank()) {
-				type = "raw";
+				type = "other";
 				writeFile.write("type" + ": " + type + "\n");
 			}
+
+			type = type.toLowerCase();
 
 			if (type.equals("calibration")) {
 				type = "calib";
 			}
 
-			if (!type.equals("raw") && !type.equals("calib")) {
+			if (!type.equals("raw") && !type.equals("calib") && !type.equals("other")) {
 				logger.log(Level.WARNING, "Unsupported type: " + type + " for file: " + file.getAbsolutePath() +
-						"Type can only be raw or calib");
+						"Type can only be raw, calib or other");
 				path = Main.spoolerProperties.gets("errorDir", Main.defaultErrorDir) + "/" + file.getName();
 				Main.moveFile(logger, file.getAbsolutePath(), path.replace("done", "invalid"));
 				monitor.incrementCounter("error_files");
