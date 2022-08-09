@@ -6,6 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -15,6 +18,8 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
+import apmon.ApMon;
+import apmon.ApMonException;
 import lazyj.ExtProperties;
 import sun.misc.Signal;
 
@@ -38,6 +43,7 @@ public class Main {
 	 * Activity monitoring
 	 */
 	private static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
+	static final ApMon apmon = MonitorFactory.getApMonSender();
 
 	/**
 	 * Default Constants
@@ -58,7 +64,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.23";
+	private static final String version = "v.1.24";
 
 	/**
 	 * Entry point
@@ -66,7 +72,7 @@ public class Main {
 	 * @param args
 	 * @throws InterruptedException
 	 */
-	public static void main(final String[] args) throws InterruptedException {
+	public static void main(final String[] args) throws InterruptedException, ApMonException, IOException {
 		spoolerProperties = ConfigUtils.getConfiguration("epn2eos");
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
@@ -187,13 +193,63 @@ public class Main {
 			}
 		});
 
+		Map<String, Integer> prevActiveTransferRuns = new HashMap<>();
 		while (shouldRun) {
+			Map<String, Integer> transferActiveRuns = getActiveRunsPerExecutor(transferWatcher.executors);
+			Map<String, Integer>  registerActiveRuns = getActiveRunsPerExecutor(registrationWatcher.executors);
+			Map<String, Integer> currentActiveTransferRuns = new HashMap<>(transferActiveRuns);
+			registerActiveRuns.forEach((key, value) -> currentActiveTransferRuns.merge(key, value, Integer::sum));
+			sendActiveRunsApMon(prevActiveTransferRuns, currentActiveTransferRuns);
+			prevActiveTransferRuns = currentActiveTransferRuns;
 			synchronized (lock) {
 				lock.wait(1000L * 60);
 			}
 		}
 	}
 
+	private static Map<String, Integer> getActiveRunsPerQueue(final ScheduledThreadPoolExecutor s) {
+		Map<String, Integer> activeRuns = new HashMap<>();
+
+		final BlockingQueue<Runnable> queue = s.getQueue();
+		queue.forEach(future -> {
+			if (future instanceof FileScheduleFuture) {
+				String run = ((FileScheduleFuture<?>) future).getOperator().getElement().getRun();
+				if (!activeRuns.containsKey(run)) {
+					activeRuns.put(run, 0);
+				}
+				activeRuns.put(run, activeRuns.get(run) + 1);
+			}
+		});
+		return activeRuns;
+	}
+
+	private static Map<String, Integer> getActiveRunsPerExecutor(Map<String, ScheduledThreadPoolExecutor> executors) {
+		Map<String, Integer> totalActiveRuns = new HashMap<>();
+
+		executors.forEach((priority, executor) -> {
+			Map<String, Integer> activeRunsPerQueue =  getActiveRunsPerQueue(executor);
+			activeRunsPerQueue.forEach((key, value) -> totalActiveRuns.merge(key, value, Integer::sum));
+		});
+		return totalActiveRuns;
+	}
+
+	private static void sendActiveRunsApMon(Map<String, Integer> prevActiveTransferRuns, Map<String, Integer> currentActiveTransferRuns) throws ApMonException, IOException {
+		final Vector<String> paramNames = new Vector<>();
+		final Vector<Object> paramValues = new Vector<>();
+
+		currentActiveTransferRuns.forEach((run, cnt) -> {
+			paramNames.add(run + "_cnt");
+			paramValues.add(cnt);
+		});
+
+		prevActiveTransferRuns.keySet().forEach(run -> {
+			if (!currentActiveTransferRuns.containsKey(run)) {
+				paramNames.add(run);
+				paramValues.add(0);
+			}
+		});
+		apmon.sendParameters("epn2eos", String.valueOf("active_runs"), paramNames.size(), paramNames, paramValues);
+	}
 	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
 		long sum = 0;
 
