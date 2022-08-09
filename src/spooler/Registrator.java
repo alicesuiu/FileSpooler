@@ -177,12 +177,13 @@ class Registrator extends FileOperator {
 	public void run() {
 		logger.log(Level.INFO, "Total number of files registered in parallel: "
 				+ Main.nrFilesOnRegister.incrementAndGet());
-
+		Main.activeRunsPerThread.put("register_thread_" + Thread.currentThread().getId(), getElement().getRun());
 		try {
 			register(getElement());
 		}
 		finally {
 			Main.nrFilesOnRegister.decrementAndGet();
+			Main.activeRunsPerThread.remove("register_thread_" + Thread.currentThread().getId());
 		}
 	}
 }

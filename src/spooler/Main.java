@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -35,6 +36,7 @@ public class Main {
 	static AtomicInteger nrDataFilesFailed = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesRegFailed = new AtomicInteger(0);
 
+	static Map<String, String> activeRunsPerThread = new ConcurrentHashMap<>();
 	static ExtProperties spoolerProperties;
 
 	private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
@@ -193,30 +195,32 @@ public class Main {
 			}
 		});
 
-		Map<String, Integer> prevActiveTransferRuns = new HashMap<>();
+		Map<String, Integer> prevActiveRuns = new HashMap<>();
 		while (shouldRun) {
 			Map<String, Integer> transferActiveRuns = getActiveRunsPerExecutor(transferWatcher.executors);
 			Map<String, Integer>  registerActiveRuns = getActiveRunsPerExecutor(registrationWatcher.executors);
-			Map<String, Integer> currentActiveTransferRuns = new HashMap<>(transferActiveRuns);
-			registerActiveRuns.forEach((key, value) -> currentActiveTransferRuns.merge(key, value, Integer::sum));
-			sendActiveRunsApMon(prevActiveTransferRuns, currentActiveTransferRuns);
-			prevActiveTransferRuns = currentActiveTransferRuns;
+			Map<String, Integer> currentActiveRuns = new HashMap<>(transferActiveRuns);
+			registerActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
+			activeRunsPerThread.forEach((id, run) -> {
+				currentActiveRuns.computeIfAbsent(run, value -> new AtomicInteger().get());
+				currentActiveRuns.put(run, currentActiveRuns.get(run) + 1);
+			});
+			sendActiveRunsApMon(prevActiveRuns, currentActiveRuns);
+			prevActiveRuns = currentActiveRuns;
 			synchronized (lock) {
 				lock.wait(1000L * 60);
 			}
 		}
 	}
 
-	private static Map<String, Integer> getActiveRunsPerQueue(final ScheduledThreadPoolExecutor s) {
+	private static Map<String, Integer> getActiveRunsPerQueue(final ScheduledThreadPoolExecutor executor) {
 		Map<String, Integer> activeRuns = new HashMap<>();
 
-		final BlockingQueue<Runnable> queue = s.getQueue();
+		final BlockingQueue<Runnable> queue = executor.getQueue();
 		queue.forEach(future -> {
 			if (future instanceof FileScheduleFuture) {
 				String run = ((FileScheduleFuture<?>) future).getOperator().getElement().getRun();
-				if (!activeRuns.containsKey(run)) {
-					activeRuns.put(run, 0);
-				}
+				activeRuns.computeIfAbsent(run, value -> new AtomicInteger().get());
 				activeRuns.put(run, activeRuns.get(run) + 1);
 			}
 		});
@@ -224,13 +228,13 @@ public class Main {
 	}
 
 	private static Map<String, Integer> getActiveRunsPerExecutor(Map<String, ScheduledThreadPoolExecutor> executors) {
-		Map<String, Integer> totalActiveRuns = new HashMap<>();
+		Map<String, Integer> activeRuns = new HashMap<>();
 
 		executors.forEach((priority, executor) -> {
 			Map<String, Integer> activeRunsPerQueue =  getActiveRunsPerQueue(executor);
-			activeRunsPerQueue.forEach((key, value) -> totalActiveRuns.merge(key, value, Integer::sum));
+			activeRunsPerQueue.forEach((key, value) -> activeRuns.merge(key, value, Integer::sum));
 		});
-		return totalActiveRuns;
+		return activeRuns;
 	}
 
 	private static void sendActiveRunsApMon(Map<String, Integer> prevActiveTransferRuns, Map<String, Integer> currentActiveTransferRuns) throws ApMonException, IOException {
