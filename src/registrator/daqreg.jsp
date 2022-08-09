@@ -186,22 +186,22 @@ if (!db.query("SELECT 123 FROM rawdata WHERE lfn='" + Format.escSQL(curl) + "';"
 }
 
 if (TFOrbits != null) {
-	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, type, TFOrbits) VALUES ('"
+	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, file_type, TFOrbits) VALUES ('"
 			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
 			+ "', '" + Format.escSQL(type) + "', ARRAY[" + Format.escSQL(TFOrbits) + "]" + ");";
 	update = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
-			+ "', addtime=" + ctime + ", type='" + Format.escSQL(type) + "', TFOrbits=ARRAY[" + Format.escSQL(TFOrbits)
+			+ "', addtime=" + ctime + ", file_type='" + Format.escSQL(type) + "', TFOrbits=ARRAY[" + Format.escSQL(TFOrbits)
 			+ "] WHERE lfn='" + Format.escSQL(curl) + "' AND (size IS NULL OR size!=" + size
 			+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime
-			+ " OR type IS NULL OR type!='" + Format.escSQL(type) + "');";
+			+ " OR file_type IS NULL OR file_type!='" + Format.escSQL(type) + "');";
 } else {
-	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, type) VALUES ('"
+	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, file_type) VALUES ('"
 			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
 			+ "', '" + Format.escSQL(type) + "');";
 	update = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
-			+ "', addtime=" + ctime + ", type='" + Format.escSQL(type) + "' WHERE lfn='" + Format.escSQL(curl)
+			+ "', addtime=" + ctime + ", file_type='" + Format.escSQL(type) + "' WHERE lfn='" + Format.escSQL(curl)
 			+ "' AND (size IS NULL OR size!=" + size + " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) +
-			"' OR addtime IS NULL OR addtime!=" + ctime + " OR type IS NULL OR type!='" + Format.escSQL(type) + "');";
+			"' OR addtime IS NULL OR addtime!=" + ctime + " OR file_type IS NULL OR file_type!='" + Format.escSQL(type) + "');";
 }
 
 if (db.geti(1) == 123) {
