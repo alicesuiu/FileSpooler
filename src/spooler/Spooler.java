@@ -212,13 +212,13 @@ class Spooler extends FileOperator {
 	public void run() {
 		logger.log(Level.INFO, "Total number of files transmitted in parallel: "
 				+ Main.nrFilesOnSend.incrementAndGet());
-		Main.activeRunsPerThread.put("transfer_thread_" + Thread.currentThread().getId(), getElement().getRun());
+		Main.activeRunsPerThread.put(Thread.currentThread().getId(), getElement().getRun());
 		try {
 			transfer(getElement());
 		}
 		finally {
 			Main.nrFilesOnSend.decrementAndGet();
-			Main.activeRunsPerThread.remove("transfer_thread_" + Thread.currentThread().getId());
+			Main.activeRunsPerThread.remove(Thread.currentThread().getId());
 		}
 	}
 }

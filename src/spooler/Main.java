@@ -36,7 +36,8 @@ public class Main {
 	static AtomicInteger nrDataFilesFailed = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesRegFailed = new AtomicInteger(0);
 
-	static Map<String, String> activeRunsPerThread = new ConcurrentHashMap<>();
+	static Map<Long, String> activeRunsPerThread = new ConcurrentHashMap<>();
+
 	static ExtProperties spoolerProperties;
 
 	private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
@@ -202,8 +203,10 @@ public class Main {
 			Map<String, Integer> currentActiveRuns = new HashMap<>(transferActiveRuns);
 			registerActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
 			activeRunsPerThread.forEach((id, run) -> {
-				currentActiveRuns.computeIfAbsent(run, value -> new AtomicInteger().get());
-				currentActiveRuns.put(run, currentActiveRuns.get(run) + 1);
+				if (!currentActiveRuns.containsKey(run))
+					currentActiveRuns.put(run, 1);
+				else
+					currentActiveRuns.put(run, currentActiveRuns.get(run) + 1);
 			});
 			sendActiveRunsApMon(prevActiveRuns, currentActiveRuns);
 			prevActiveRuns = currentActiveRuns;
@@ -220,8 +223,10 @@ public class Main {
 		queue.forEach(future -> {
 			if (future instanceof FileScheduleFuture) {
 				String run = ((FileScheduleFuture<?>) future).getOperator().getElement().getRun();
-				activeRuns.computeIfAbsent(run, value -> new AtomicInteger().get());
-				activeRuns.put(run, activeRuns.get(run) + 1);
+				if (!activeRuns.containsKey(run))
+					activeRuns.put(run, 1);
+				else
+					activeRuns.put(run, activeRuns.get(run) + 1);
 			}
 		});
 		return activeRuns;
