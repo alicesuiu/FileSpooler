@@ -75,13 +75,14 @@ String md5 = rw.gets("md5");
 String TFOrbits = rw.gets("TFOrbits");
 String hostname = rw.gets("hostname");
 String persistent = rw.gets("persistent");
+final String type = rw.gets("type");
 
 // sanity check
 if (size <= 0 || surl.length() == 0
 		|| md5.length() == 0 || period.length() == 0
 		|| curl.length() == 0 || seName.length() == 0
 		|| seioDaemons.length() == 0 || TFOrbits.length() == 0
-		|| persistent.length() == 0) {
+		|| persistent.length() == 0 || type.length() == 0) {
 	logMessage("Wrong parameters");
 	response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 	return;
@@ -185,19 +186,22 @@ if (!db.query("SELECT 123 FROM rawdata WHERE lfn='" + Format.escSQL(curl) + "';"
 }
 
 if (TFOrbits != null) {
-	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, TFOrbits) VALUES ('"
+	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, type, TFOrbits) VALUES ('"
 			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
-			+ "', ARRAY[" + Format.escSQL(TFOrbits) + "]" + ");";
+			+ "', '" + Format.escSQL(type) + "', ARRAY[" + Format.escSQL(TFOrbits) + "]" + ");";
 	update = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
-			+ "', addtime=" + ctime + ", TFOrbits=ARRAY[" + Format.escSQL(TFOrbits)
+			+ "', addtime=" + ctime + ", type='" + Format.escSQL(type) + "', TFOrbits=ARRAY[" + Format.escSQL(TFOrbits)
 			+ "] WHERE lfn='" + Format.escSQL(curl) + "' AND (size IS NULL OR size!=" + size
-			+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime + ");";
+			+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime
+			+ " OR type IS NULL OR type!='" + Format.escSQL(type) + "');";
 } else {
-	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn) VALUES ('"
-			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl) + "');";
+	insert = "INSERT INTO rawdata (lfn, addtime, size, pfn, type) VALUES ('"
+			+ Format.escSQL(curl) + "', " + ctime + ", " + size + ", '" + Format.escSQL(surl)
+			+ "', '" + Format.escSQL(type) + "');";
 	update = "UPDATE rawdata SET size=" + size + ", pfn='" + Format.escSQL(surl)
-			+ "', addtime=" + ctime + "WHERE lfn='" + Format.escSQL(curl) + "' AND (size IS NULL OR size!=" + size
-			+ " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) + "' OR addtime IS NULL OR addtime!=" + ctime + ");";
+			+ "', addtime=" + ctime + ", type='" + Format.escSQL(type) + "' WHERE lfn='" + Format.escSQL(curl)
+			+ "' AND (size IS NULL OR size!=" + size + " OR pfn IS NULL OR pfn!='" + Format.escSQL(surl) +
+			"' OR addtime IS NULL OR addtime!=" + ctime + " OR type IS NULL OR type!='" + Format.escSQL(type) + "');";
 }
 
 if (db.geti(1) == 123) {
