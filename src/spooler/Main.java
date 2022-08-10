@@ -247,7 +247,7 @@ public class Main {
 		final Vector<Object> paramValues = new Vector<>();
 
 		currentActiveTransferRuns.forEach((run, cnt) -> {
-			paramNames.add(run + "_cnt");
+			paramNames.add(run);
 			paramValues.add(cnt);
 		});
 
@@ -257,7 +257,10 @@ public class Main {
 				paramValues.add(0);
 			}
 		});
-		apmon.sendParameters("epn2eos", String.valueOf("active_runs"), paramNames.size(), paramNames, paramValues);
+		logger.log(Level.INFO, "List of active runs::q" +
+				" " + paramNames);
+		logger.log(Level.INFO, "Nr of files for each active run: " + paramValues);
+		apmon.sendParameters("epn2eos", "active_runs", paramNames.size(), paramNames, paramValues);
 	}
 	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
 		long sum = 0;
