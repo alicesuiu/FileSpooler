@@ -200,7 +200,8 @@ public class Main {
 		while (shouldRun) {
 			Map<String, Integer> transferActiveRuns = getActiveRunsPerExecutor(transferWatcher.executors);
 			Map<String, Integer>  registerActiveRuns = getActiveRunsPerExecutor(registrationWatcher.executors);
-			Map<String, Integer> currentActiveRuns = new HashMap<>(transferActiveRuns);
+			Map<String, Integer> currentActiveRuns = new HashMap<>();
+			transferActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
 			registerActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
 			activeRunsPerThread.forEach((id, run) -> {
 				if (!currentActiveRuns.containsKey(run))
@@ -257,9 +258,14 @@ public class Main {
 				paramValues.add(0);
 			}
 		});
-		logger.log(Level.INFO, "List of active runs::q" +
-				" " + paramNames);
-		logger.log(Level.INFO, "Nr of files for each active run: " + paramValues);
+
+		if (paramNames.size() > 0) {
+			StringBuilder result = new StringBuilder();
+			for (int i = 0; i < paramNames.size(); i++) {
+				result.append("(").append(paramNames.get(i)).append(", ").append(paramValues.get(i)).append(") ");
+			}
+			logger.log(Level.INFO, "List of active runs: " + result);
+		}
 		apmon.sendParameters("epn2eos", "active_runs", paramNames.size(), paramNames, paramValues);
 	}
 	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
