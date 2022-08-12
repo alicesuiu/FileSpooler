@@ -46,7 +46,6 @@ public class Main {
 	 * Activity monitoring
 	 */
 	private static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
-	//static final ApMon apmon = MonitorFactory.getApMonSender();
 
 	/**
 	 * Default Constants
@@ -265,7 +264,8 @@ public class Main {
 				result.append("(").append(paramNames.get(i)).append(", ").append(paramValues.get(i)).append(") ");
 			}
 			logger.log(Level.INFO, "List of active runs: " + result);
-			//apmon.sendParameters("epn2eos", "active_runs", paramNames.size(), paramNames, paramValues);
+			ApMon apmon = MonitorFactory.getApMonSender();
+			apmon.sendParameters("epn2eos", "active_runs", paramNames.size(), paramNames, paramValues);
 		}
 	}
 	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
