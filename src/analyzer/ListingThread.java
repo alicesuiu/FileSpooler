@@ -1,18 +1,20 @@
 package analyzer;
 
+import alien.config.ConfigUtils;
 import alien.io.xrootd.XrootdFile;
 import alien.io.xrootd.XrootdListing;
 import alien.site.supercomputing.titan.Pair;
 
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ListingThread implements Runnable {
-    private String server = Main.listingProperties.gets("seioDaemons", Main.defaultseioDaemons)
-            .substring(Main.listingProperties.gets("seioDaemons",
-                    Main.defaultseioDaemons).lastIndexOf('/') + 1);
     private BlockingQueue<String> dirs;
+    private static Logger logger = ConfigUtils.getLogger(ListingThread.class.getCanonicalName());
 
     ListingThread(BlockingQueue<String> dirs) {
         this.dirs = dirs;
@@ -24,31 +26,45 @@ public class ListingThread implements Runnable {
             try {
                 String dir = dirs.take();
                 Pair<Integer, Long> stats =  scanFiles(dir);
-                System.out.println("Dir path: " + dir + " size: " + stats.getSecond() + " files: " + stats.getFirst());
+                try (FileWriter writer = new FileWriter(ListingUtils.statRootDirsFileName, true)) {
+                    writer.write("path: " + dir + ", size: " + stats.getSecond() + ", files: " + stats.getFirst() + "\n");
+                }
             } catch (InterruptedException | IOException e) {
-                System.out.println("Thread was interrupted");
+                logger.log(Level.WARNING, "Thread was interrupted");
             }
         }
     }
 
-    private Pair<Integer, Long> scanFiles(String path) throws IOException {
-        XrootdListing listing = new XrootdListing(server, path);
-        Set<XrootdFile> directories = listing.getDirs();
-        Set<XrootdFile> listFiles = listing.getFiles();
+    private Pair<Integer, Long> scanFiles(String path) {
+        XrootdListing listing;
         int nr_files = 0;
         long nr_bytes = 0L;
+        try {
+            listing = new XrootdListing(ListingUtils.server, path);
+            Set<XrootdFile> directories = listing.getDirs();
+            Set<XrootdFile> listFiles = listing.getFiles();
 
-        for (XrootdFile file : listFiles) {
-            nr_files += 1;
-            nr_bytes += file.size;
+            try (FileWriter writer = new FileWriter(ListingUtils.statFileName, true)) {
+                for (XrootdFile file : listFiles) {
+                    nr_files += 1;
+                    nr_bytes += file.size;
+
+                    writer.write(file.path + ", " + file.size + "\n");
+                }
+            } catch (IOException e) {
+                logger.log(Level.WARNING, "Cannot write to the file: " + ListingUtils.statFileName);
+            }
+
+            for (XrootdFile dir : directories) {
+                Pair<Integer, Long> stats =  scanFiles(dir.path);
+                nr_files += stats.getFirst();
+                nr_bytes += stats.getSecond();
+            }
+            return new Pair<>(nr_files, nr_bytes);
+        } catch (IOException e) {
+           //todo
         }
 
-        for (XrootdFile dir : directories) {
-            Pair<Integer, Long> stats =  scanFiles(dir.path);
-            nr_files += stats.getFirst();
-            nr_bytes += stats.getSecond();
-        }
-
-        return new Pair<>(nr_files, nr_bytes);
+        return new Pair<>(0, 0L);
     }
 }

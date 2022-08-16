@@ -7,7 +7,7 @@ build_metadata_tool:
 	cp -r config ./out_metadata_tool
 
 build_analyzer:
-	javac -cp ./libs/alien-cs_v1.4.5.jar -d ./out_analyzer_tool ./src/analyzer/*.java
+	javac -cp ./libs/alien-cs_v1.4.6.jar -d ./out_analyzer_tool ./src/analyzer/*.java
 	cp -r config ./out_analyzer_tool
 
 run_spooler:

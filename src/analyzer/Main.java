@@ -4,12 +4,13 @@ import alien.config.ConfigUtils;
 import alien.io.xrootd.XrootdFile;
 import lazyj.ExtProperties;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
     static ExtProperties listingProperties;
@@ -19,34 +20,36 @@ public class Main {
     private static final int defaultThreads = 4;
     private static BlockingQueue<String> dirs = new LinkedBlockingDeque<>();
 
+    private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
+
     public static void main(String[] args) throws IOException {
         File listingDirs;
         listingProperties = ConfigUtils.getConfiguration("listing");
 
         if (listingProperties == null) {
-            System.out.println("Cannot find listing config file");
+            logger.log(Level.WARNING, "Cannot find listing config file");
             return;
         }
 
-        System.out.println("Storage Element Name: " + listingProperties.gets("seName", defaultSEName));
-        System.out.println("Storage Element seioDaemons: " + listingProperties.gets("seioDaemons", defaultseioDaemons));
-        System.out.println("Listing Dirs Path: " + listingProperties.gets("listingDirs", defaultListingDirs));
-        System.out.println("Number of listing threads: " + listingProperties.geti("queue.default.threads", defaultThreads));
+        logger.log(Level.INFO, "Storage Element Name: " + listingProperties.gets("seName", defaultSEName));
+        logger.log(Level.INFO,"Storage Element seioDaemons: " + listingProperties.gets("seioDaemons", defaultseioDaemons));
+        logger.log(Level.INFO,"Listing Dirs Path: " + listingProperties.gets("listingDirs", defaultListingDirs));
+        logger.log(Level.INFO,"Number of listing threads: " + listingProperties.geti("queue.default.threads", defaultThreads));
 
         listingDirs = new File(listingProperties.gets("listingDirs", defaultListingDirs));
         if (!listingDirs.exists() || listingDirs.length() == 0) {
-            System.out.println("The file that contains the list of dirs to be processed does not exist or is empty");
+            logger.log(Level.WARNING,"The file that contains the list of dirs to be processed does not exist or is empty");
             return;
         }
 
-        try(BufferedReader reader = new BufferedReader(new FileReader(listingProperties.gets("listingDirs", defaultListingDirs)))) {
-            String path;
-            while ((path = reader.readLine()) != null) {
-                dirs.add(path.trim());
+        Set<String> scandDirs = ListingUtils.getScanDirs(listingProperties.gets("listingDirs", defaultListingDirs));
+        for (String scan : scandDirs) {
+            Set<XrootdFile> firstLevelDirs = ListingUtils.getFirstLevelDirs(scan);
+            for (XrootdFile dir : firstLevelDirs) {
+                logger.log(Level.INFO, "Dir path: " + dir.path);
+                dirs.add(dir.path);
             }
-        } catch (IOException e) {
-            System.out.println("Caught exception while trying to read from file "
-                    + listingProperties.gets("listingDirs", defaultListingDirs));
+
         }
 
         Thread[] threads = new Thread[listingProperties.geti("queue.default.threads", defaultThreads)];
