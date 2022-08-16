@@ -6,7 +6,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -15,6 +19,8 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
+import apmon.ApMon;
+import apmon.ApMonException;
 import lazyj.ExtProperties;
 import sun.misc.Signal;
 
@@ -29,6 +35,8 @@ public class Main {
 	static AtomicInteger nrDataFilesReg = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesFailed = new AtomicInteger(0);
 	static AtomicInteger nrDataFilesRegFailed = new AtomicInteger(0);
+
+	static Map<Long, String> activeRunsPerThread = new ConcurrentHashMap<>();
 
 	static ExtProperties spoolerProperties;
 
@@ -58,7 +66,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.23";
+	private static final String version = "v.1.24";
 
 	/**
 	 * Entry point
@@ -66,7 +74,7 @@ public class Main {
 	 * @param args
 	 * @throws InterruptedException
 	 */
-	public static void main(final String[] args) throws InterruptedException {
+	public static void main(final String[] args) throws InterruptedException, ApMonException, IOException {
 		spoolerProperties = ConfigUtils.getConfiguration("epn2eos");
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
@@ -187,13 +195,79 @@ public class Main {
 			}
 		});
 
+		Map<String, Integer> prevActiveRuns = new HashMap<>();
 		while (shouldRun) {
+			Map<String, Integer> transferActiveRuns = getActiveRunsPerExecutor(transferWatcher.executors);
+			Map<String, Integer>  registerActiveRuns = getActiveRunsPerExecutor(registrationWatcher.executors);
+			Map<String, Integer> currentActiveRuns = new HashMap<>();
+			transferActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
+			registerActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
+			activeRunsPerThread.forEach((id, run) -> {
+				if (!currentActiveRuns.containsKey(run))
+					currentActiveRuns.put(run, 1);
+				else
+					currentActiveRuns.put(run, currentActiveRuns.get(run) + 1);
+			});
+			sendActiveRunsApMon(prevActiveRuns, currentActiveRuns);
+			prevActiveRuns = currentActiveRuns;
 			synchronized (lock) {
 				lock.wait(1000L * 60);
 			}
 		}
 	}
 
+	private static Map<String, Integer> getActiveRunsPerQueue(final ScheduledThreadPoolExecutor executor) {
+		Map<String, Integer> activeRuns = new HashMap<>();
+
+		final BlockingQueue<Runnable> queue = executor.getQueue();
+		queue.forEach(future -> {
+			if (future instanceof FileScheduleFuture) {
+				String run = ((FileScheduleFuture<?>) future).getOperator().getElement().getRun();
+				if (!activeRuns.containsKey(run))
+					activeRuns.put(run, 1);
+				else
+					activeRuns.put(run, activeRuns.get(run) + 1);
+			}
+		});
+		return activeRuns;
+	}
+
+	private static Map<String, Integer> getActiveRunsPerExecutor(Map<String, ScheduledThreadPoolExecutor> executors) {
+		Map<String, Integer> activeRuns = new HashMap<>();
+
+		executors.forEach((priority, executor) -> {
+			Map<String, Integer> activeRunsPerQueue =  getActiveRunsPerQueue(executor);
+			activeRunsPerQueue.forEach((key, value) -> activeRuns.merge(key, value, Integer::sum));
+		});
+		return activeRuns;
+	}
+
+	private static void sendActiveRunsApMon(Map<String, Integer> prevActiveTransferRuns, Map<String, Integer> currentActiveTransferRuns) throws ApMonException, IOException {
+		final Vector<String> paramNames = new Vector<>();
+		final Vector<Object> paramValues = new Vector<>();
+
+		currentActiveTransferRuns.forEach((run, cnt) -> {
+			paramNames.add(run);
+			paramValues.add(cnt);
+		});
+
+		prevActiveTransferRuns.keySet().forEach(run -> {
+			if (!currentActiveTransferRuns.containsKey(run)) {
+				paramNames.add(run);
+				paramValues.add(0);
+			}
+		});
+
+		if (paramNames.size() > 0) {
+			StringBuilder result = new StringBuilder();
+			for (int i = 0; i < paramNames.size(); i++) {
+				result.append("(").append(paramNames.get(i)).append(", ").append(paramValues.get(i)).append(") ");
+			}
+			logger.log(Level.INFO, "List of active runs: " + result);
+			ApMon apmon = MonitorFactory.getApMonSender();
+			apmon.sendParameters("epn2eos", "active_runs", paramNames.size(), paramNames, paramValues);
+		}
+	}
 	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
 		long sum = 0;
 

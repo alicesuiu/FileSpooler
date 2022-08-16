@@ -24,7 +24,7 @@ class Registrator extends FileOperator {
 	private static final Logger logger = ConfigUtils.getLogger(Registrator.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 
-	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg3.jsp";
+	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg4.jsp";
 
 	Registrator(final FileElement element) {
 		super(element);
@@ -62,10 +62,11 @@ class Registrator extends FileOperator {
 		urlParam += encode("hostname") + "=" + encode(hostname) + "&";
 
 		if (element.getPersistent() == 0)
-			urlParam += encode("persistent") + "=" + encode("missing");
+			urlParam += encode("persistent") + "=" + encode("missing") + "&";
 		else
-			urlParam += encode("persistent") + "=" + encode(String.valueOf(element.getPersistent()));
+			urlParam += encode("persistent") + "=" + encode(String.valueOf(element.getPersistent())) + "&";
 
+		urlParam += encode("type") + "=" + encode(element.getType());
 		return urlParam;
 	}
 
@@ -176,12 +177,13 @@ class Registrator extends FileOperator {
 	public void run() {
 		logger.log(Level.INFO, "Total number of files registered in parallel: "
 				+ Main.nrFilesOnRegister.incrementAndGet());
-
+		Main.activeRunsPerThread.put(Thread.currentThread().getId(), getElement().getRun());
 		try {
 			register(getElement());
 		}
 		finally {
 			Main.nrFilesOnRegister.decrementAndGet();
+			Main.activeRunsPerThread.remove(Thread.currentThread().getId());
 		}
 	}
 }

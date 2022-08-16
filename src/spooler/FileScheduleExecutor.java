@@ -13,6 +13,9 @@ public class FileScheduleExecutor extends ScheduledThreadPoolExecutor {
         if (runnable instanceof Spooler) {
             return new FileScheduleFuture<>((Spooler) runnable, task);
         }
+        if (runnable instanceof  Registrator) {
+            return new FileScheduleFuture<>((Registrator) runnable, task);
+        }
         return super.decorateTask(runnable, task);
     }
 }

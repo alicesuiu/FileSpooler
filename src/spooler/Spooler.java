@@ -15,6 +15,7 @@ import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
 import alien.se.SE;
 import lazyj.Format;
+import org.junit.platform.console.options.Theme;
 
 /**
  * @author asuiu
@@ -211,11 +212,13 @@ class Spooler extends FileOperator {
 	public void run() {
 		logger.log(Level.INFO, "Total number of files transmitted in parallel: "
 				+ Main.nrFilesOnSend.incrementAndGet());
+		Main.activeRunsPerThread.put(Thread.currentThread().getId(), getElement().getRun());
 		try {
 			transfer(getElement());
 		}
 		finally {
 			Main.nrFilesOnSend.decrementAndGet();
+			Main.activeRunsPerThread.remove(Thread.currentThread().getId());
 		}
 	}
 }
