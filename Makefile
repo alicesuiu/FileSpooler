@@ -1,5 +1,5 @@
 build_spooler:
-	javac -cp ./libs/alien-cs_v1.4.6.jar -d ./out_spooler ./src/spooler/*.java
+	javac -cp ./libs/alien-cs_v1.4.7.jar -d ./out_spooler ./src/spooler/*.java
 	cp -r config ./out_spooler
 
 build_metadata_tool:

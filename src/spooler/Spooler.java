@@ -24,6 +24,7 @@ import lazyj.Format;
 class Spooler extends FileOperator {
 	private static final Logger logger = ConfigUtils.getLogger(Spooler.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(Spooler.class.getCanonicalName());
+	private static final Monitor transientDataMonitor = MonitorFactory.getMonitor("epn2eos-transient-data");
 
 	Spooler(FileElement element) {
 		super(element);
@@ -70,24 +71,32 @@ class Spooler extends FileOperator {
 
         if (element.getType().equalsIgnoreCase("raw")) {
         	monitor.addMeasurement("data_RAW_total", element.getSize());
-
         	if (element.getSurl().contains(".root"))
         		monitor.addMeasurement("data_RAW_root", element.getSize());
         	else if (element.getSurl().contains(".tf"))
         		monitor.addMeasurement("data_RAW_tf", element.getSize());
 		} else if (element.getType().equalsIgnoreCase("calib")) {
         	monitor.addMeasurement("data_CALIB_total", element.getSize());
-
 			if (element.getSurl().contains(".root"))
 				monitor.addMeasurement("data_CALIB_root", element.getSize());
 			else if (element.getSurl().contains(".tf"))
 				monitor.addMeasurement("data_CALIB_tf", element.getSize());
+		} else if (element.getType().equalsIgnoreCase("other")) {
+			monitor.addMeasurement("data_OTHER_total", element.getSize());
+			if (element.getSurl().contains(".root"))
+				monitor.addMeasurement("data_OTHER_root", element.getSize());
+			else if (element.getSurl().contains(".tf"))
+				monitor.addMeasurement("data_OTHER_tf", element.getSize());
 		}
 
-        if (element.getSurl().contains(".root"))
-        	monitor.addMeasurement("data_total_root", element.getSize());
-        else if (element.getSurl().contains(".tf"))
-        	monitor.addMeasurement("data_total_tf", element.getSize());
+        if (element.getSurl().contains(".root")) {
+			monitor.addMeasurement("data_total_root", element.getSize());
+			transientDataMonitor.addTransientMeasurement(element.getRun() + "-root", element.getSize());
+		}
+        else if (element.getSurl().contains(".tf")) {
+			monitor.addMeasurement("data_total_tf", element.getSize());
+			transientDataMonitor.addTransientMeasurement(element.getRun() + "-tf", element.getSize());
+		}
 
 		Main.nrDataFilesSent.getAndIncrement();
 		logger.log(Level.INFO, "Total number of data files successfully transferred: "

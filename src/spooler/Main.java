@@ -286,10 +286,11 @@ public class Main {
 			}
 			logger.log(Level.INFO, "List of active runs: " + result);
 			ApMon apmon = MonitorFactory.getApMonSender();
+			String node = ConfigUtils.getLocalHostname();
 			if (!isSize)
-				apmon.sendParameters("epn2eos", "active_runs_cnt", paramNames.size(), paramNames, paramValues);
+				apmon.sendParameters("epn2eos", node + "_cnt", paramNames.size(), paramNames, paramValues);
 			else
-				apmon.sendParameters("epn2eos", "active_runs_size", paramNames.size(), paramNames, paramValues);
+				apmon.sendParameters("epn2eos", node + "_size", paramNames.size(), paramNames, paramValues);
 		}
 	}
 	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
