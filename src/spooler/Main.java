@@ -19,6 +19,7 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
+import alien.site.supercomputing.titan.Pair;
 import apmon.ApMon;
 import apmon.ApMonException;
 import lazyj.ExtProperties;
@@ -37,6 +38,7 @@ public class Main {
 	static AtomicInteger nrDataFilesRegFailed = new AtomicInteger(0);
 
 	static Map<Long, String> activeRunsPerThread = new ConcurrentHashMap<>();
+	static Map<Long, Pair<String, Long>> activeRunsSize = new ConcurrentHashMap<>();
 
 	static ExtProperties spoolerProperties;
 
@@ -66,7 +68,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.24";
+	private static final String version = "v.1.25";
 
 	/**
 	 * Entry point
@@ -195,64 +197,83 @@ public class Main {
 			}
 		});
 
-		Map<String, Integer> prevActiveRuns = new HashMap<>();
+		Map<String, Long> prevActiveRuns = new HashMap<>();
+		Map<String, Long> prevActiverRunsSize = new HashMap<>();
 		while (shouldRun) {
-			Map<String, Integer> transferActiveRuns = getActiveRunsPerExecutor(transferWatcher.executors);
-			Map<String, Integer>  registerActiveRuns = getActiveRunsPerExecutor(registrationWatcher.executors);
-			Map<String, Integer> currentActiveRuns = new HashMap<>();
-			transferActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
-			registerActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Integer::sum));
+			Map<String, Long> transferActiveRuns = getActiveRunsPerExecutor(transferWatcher.executors, false);
+			Map<String, Long>  registerActiveRuns = getActiveRunsPerExecutor(registrationWatcher.executors, false);
+			Map<String, Long> currentActiveRuns = new HashMap<>();
+			transferActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Long::sum));
+			registerActiveRuns.forEach((key, value) -> currentActiveRuns.merge(key, value, Long::sum));
 			activeRunsPerThread.forEach((id, run) -> {
 				if (!currentActiveRuns.containsKey(run))
-					currentActiveRuns.put(run, 1);
+					currentActiveRuns.put(run, 1L);
 				else
-					currentActiveRuns.put(run, currentActiveRuns.get(run) + 1);
+					currentActiveRuns.put(run, currentActiveRuns.get(run) + 1L);
 			});
-			sendActiveRunsApMon(prevActiveRuns, currentActiveRuns);
+			sendActiveRunsApMon(prevActiveRuns, currentActiveRuns, false);
 			prevActiveRuns = currentActiveRuns;
+
+			Map<String, Long> transferActiveRunsSize = getActiveRunsPerExecutor(transferWatcher.executors, true);
+			Map<String, Long> currentActiveRunsSize = new HashMap<>();
+			transferActiveRunsSize.forEach((key, value) -> currentActiveRunsSize.merge(key, value, Long::sum));
+			activeRunsSize.forEach((id, pair) -> {
+				String run = pair.getFirst();
+				Long size = pair.getSecond();
+				if (!currentActiveRunsSize.containsKey(run))
+					currentActiveRunsSize.put(run, size);
+				else
+					currentActiveRunsSize.put(run, currentActiveRunsSize.get(run) + size);
+			});
+			sendActiveRunsApMon(prevActiverRunsSize, currentActiveRunsSize, true);
+			prevActiverRunsSize = currentActiveRunsSize;
+
 			synchronized (lock) {
 				lock.wait(1000L * 60);
 			}
 		}
 	}
 
-	private static Map<String, Integer> getActiveRunsPerQueue(final ScheduledThreadPoolExecutor executor) {
-		Map<String, Integer> activeRuns = new HashMap<>();
+	private static Map<String, Long> getActiveRunsPerQueue(final ScheduledThreadPoolExecutor executor, boolean isSize) {
+		Map<String, Long> activeRuns = new HashMap<>();
 
 		final BlockingQueue<Runnable> queue = executor.getQueue();
 		queue.forEach(future -> {
 			if (future instanceof FileScheduleFuture) {
 				String run = ((FileScheduleFuture<?>) future).getOperator().getElement().getRun();
+				Long cnt = (isSize ? ((FileScheduleFuture<?>) future).getOperator().getElement().getSize() : 1);
 				if (!activeRuns.containsKey(run))
-					activeRuns.put(run, 1);
+					activeRuns.put(run, cnt);
 				else
-					activeRuns.put(run, activeRuns.get(run) + 1);
+					activeRuns.put(run, activeRuns.get(run) + cnt);
 			}
 		});
 		return activeRuns;
 	}
 
-	private static Map<String, Integer> getActiveRunsPerExecutor(Map<String, ScheduledThreadPoolExecutor> executors) {
-		Map<String, Integer> activeRuns = new HashMap<>();
+	private static Map<String, Long> getActiveRunsPerExecutor(Map<String, ScheduledThreadPoolExecutor> executors, boolean isSize) {
+		Map<String, Long> activeRuns = new HashMap<>();
 
 		executors.forEach((priority, executor) -> {
-			Map<String, Integer> activeRunsPerQueue =  getActiveRunsPerQueue(executor);
-			activeRunsPerQueue.forEach((key, value) -> activeRuns.merge(key, value, Integer::sum));
+			Map<String, Long> activeRunsPerQueue =  getActiveRunsPerQueue(executor, isSize);
+			activeRunsPerQueue.forEach((key, value) -> activeRuns.merge(key, value, Long::sum));
 		});
 		return activeRuns;
 	}
 
-	private static void sendActiveRunsApMon(Map<String, Integer> prevActiveTransferRuns, Map<String, Integer> currentActiveTransferRuns) throws ApMonException, IOException {
+	private static void sendActiveRunsApMon(Map<String, Long> prevActiveRuns,
+											Map<String, Long> currentActiveRuns,
+											boolean isSize) throws ApMonException, IOException {
 		final Vector<String> paramNames = new Vector<>();
 		final Vector<Object> paramValues = new Vector<>();
 
-		currentActiveTransferRuns.forEach((run, cnt) -> {
+		currentActiveRuns.forEach((run, cnt) -> {
 			paramNames.add(run);
 			paramValues.add(cnt);
 		});
 
-		prevActiveTransferRuns.keySet().forEach(run -> {
-			if (!currentActiveTransferRuns.containsKey(run)) {
+		prevActiveRuns.keySet().forEach(run -> {
+			if (!currentActiveRuns.containsKey(run)) {
 				paramNames.add(run);
 				paramValues.add(0);
 			}
@@ -265,7 +286,11 @@ public class Main {
 			}
 			logger.log(Level.INFO, "List of active runs: " + result);
 			ApMon apmon = MonitorFactory.getApMonSender();
-			apmon.sendParameters("epn2eos", "active_runs", paramNames.size(), paramNames, paramValues);
+			String node = ConfigUtils.getLocalHostname();
+			if (!isSize)
+				apmon.sendParameters("epn2eos", node + "_cnt", paramNames.size(), paramNames, paramValues);
+			else
+				apmon.sendParameters("epn2eos", node + "_size", paramNames.size(), paramNames, paramValues);
 		}
 	}
 	private static long totalFilesSize(final ScheduledThreadPoolExecutor s) {
