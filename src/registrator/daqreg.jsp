@@ -136,6 +136,7 @@ if (idx > 0) {
 }
 
 LFN existing = LFNUtils.getLFN(curl);
+int regCode = -1;
 
 if (existing != null) {
 	logMessage(client + ": File was already registered: " + curl);
@@ -144,7 +145,7 @@ if (existing != null) {
 		response.sendError(HttpServletResponse.SC_CONFLICT, "File " + curl
 		+ " already exists in the catalogue with a different size (" + existing.size + " vs " + size + ")");
 	else
-		response.setStatus(HttpServletResponse.SC_OK);
+		regCode = 0;
 }
 else {
 	boolean done = false;
@@ -165,7 +166,7 @@ else {
 	}
 	else {
 		logMessage(client + ": Successfuly registered for: " + msg);
-		response.setStatus(HttpServletResponse.SC_CREATED);
+		regCode = 1;
 	}
 }
 
@@ -182,6 +183,7 @@ String insert, update;
 
 if (!db.query("SELECT 123 FROM rawdata WHERE lfn='" + Format.escSQL(curl) + "';")) {
 	logMessage("Repository: cannot query database");
+	response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Repository: cannot query database");
 	return;
 }
 
@@ -215,12 +217,14 @@ if (db.geti(1) == 123) {
 		}
 	} else {
 		logMessage(client + ": Repository: cannot update the existing file: " + curl);
+		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Repository: cannot update the existing file: " + curl);
 		code = 3;
 	}
 } else {
 	if (db.syncUpdateQuery(insert)) {
 		if (db.getUpdateCount() == 0) {
 			logMessage(client + ": Repository: cannot insert new file: " + curl);
+			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Repository: cannot insert new file: " + curl);
 			code = 4;
 		} else {
 			logMessage(client + ": Repository: new file successfully inserted: " + curl);
@@ -228,8 +232,25 @@ if (db.geti(1) == 123) {
 		}
 	} else {
 		logMessage(client + ": Repository: cannot insert new file: " + curl);
+		response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Repository: cannot insert new file: " + curl);
 		code = 6;
 	}
+}
+
+/*
+Codes Legend
+* regCode = 0 - file was already registered in catalogue
+* regCode = 1 - file was successfully registered in catalogue
+* code = 1 - update in rawdata - file existed with all details
+* code = 2 - update in rawdata - file existed but was updated
+* code = 3 - update in rawdata failed
+* code = 4 - insert in rawdata failed
+* code = 5 - insert in rawdata - file was successfully inserted
+* code = 6 - insert in rawdata failed
+* */
+
+if ((regCode == 0 || regCode == 1) && (code == 1 ||  code == 2 || code == 5)) {
+	response.setStatus(HttpServletResponse.SC_OK);
 }
 
 lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?lfn=" + curl + "&pfn=" + pfn + "&size=" + size, code, request);
