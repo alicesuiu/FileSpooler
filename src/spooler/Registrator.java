@@ -24,7 +24,7 @@ class Registrator extends FileOperator {
 	private static final Logger logger = ConfigUtils.getLogger(Registrator.class.getCanonicalName());
 	private static final Monitor monitor = MonitorFactory.getMonitor(Registrator.class.getCanonicalName());
 
-	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg4.jsp";
+	private static final String URL = "http://alimonitor.cern.ch/epn2eos/daqreg5.jsp";
 
 	Registrator(final FileElement element) {
 		super(element);

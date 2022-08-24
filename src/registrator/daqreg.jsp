@@ -94,9 +94,8 @@
 			return;
 		}
 
-		if (ctime <= 0) {
+		if (ctime <= 0)
 			ctime = GUIDUtils.epochTime(UUID.fromString(guid));
-		}
 
 		if (md5.contains("missing"))
 			md5 = null;
@@ -215,11 +214,10 @@
 
 		if (db.geti(1) == 123) {
 			if (db.syncUpdateQuery(update)) {
-				if (db.getUpdateCount() == 0) {
+				if (db.getUpdateCount() == 0)
 					logMessage(client + ": Repository: file existed with all details: " + curl);
-				} else {
+				else
 					logMessage(client + ": Repository: file existed but was updated: " + curl);
-				}
 			} else {
 				logMessage(client + ": Repository: cannot update the existing file: " + curl);
 				response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Repository: cannot update the existing file: " + curl);
