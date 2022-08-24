@@ -164,7 +164,7 @@ class Registrator extends FileOperator {
 		int status = response.getFirst().intValue();
 		String msg = response.getSecond();
 
-		if (status == HttpServletResponse.SC_OK || status == HttpServletResponse.SC_CREATED) {
+		if (status == HttpServletResponse.SC_OK) {
 			onSuccess(element);
 			return true;
 		}
