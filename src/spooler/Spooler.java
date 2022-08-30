@@ -60,7 +60,7 @@ class Spooler extends FileOperator {
 		return fileXXHash.equals(xxhash);
 	}*/
 
-	private static void onSuccess(FileElement element, double transfer_time) throws IOException {
+	private static void onSuccess(FileElement element, double transfer_time, Pair<String, String> storage) throws IOException {
 		DecimalFormat formatter = new DecimalFormat("#.##");
         logger.log(Level.INFO, "Successfully transfered: "
 						+ element.getSurl()
@@ -111,33 +111,54 @@ class Spooler extends FileOperator {
 			}
 		}
 
+		element.setSeName(storage.getFirst());
+		element.setSeioDaemons(storage.getSecond());
+
 		String destPath = Main.spoolerProperties.gets("registrationDir", Main.defaultRegistrationDir)
 				+ element.getMetaFilePath().substring(element.getMetaFilePath().lastIndexOf('/'));
 		String srcPath = element.getMetaFilePath();
 
-		if (element.getNrTries() != 0) {
-			String intermediatePath = destPath.replace("done", "meta");
-			String line;
+		String intermediatePath = destPath.replace("done", "meta");
+		String line;
+		int existingSEName = 0, existingseioDaemons = 0;
 
-			try (BufferedReader br = new BufferedReader(new FileReader(srcPath));
-					FileWriter writer = new FileWriter(intermediatePath)) {
-				while ((line = br.readLine()) != null) {
-					if (line.contains("surl")) {
-						writer.write("surl" + ": " + element.getSurl() + "\n");
-					} else {
-						writer.write(line + "\n");
-					}
+		try (BufferedReader br = new BufferedReader(new FileReader(srcPath));
+			 FileWriter writer = new FileWriter(intermediatePath)) {
+			while ((line = br.readLine()) != null) {
+				if (line.contains("surl") && (element.getNrTries() != 0)) {
+					writer.write("surl" + ": " + element.getSurl() + "\n");
+					continue;
 				}
+
+				if (line.contains("seName")) {
+					writer.write("seName" + ": " + element.getSeName() + "\n");
+					existingSEName = 1;
+					continue;
+				}
+
+				if (line.contains("seioDaemons")) {
+					writer.write("seioDaemons" + ": " + element.getSeioDaemons() + "\n");
+					existingseioDaemons = 1;
+					continue;
+				}
+
+				writer.write(line + "\n");
 			}
 
-			if (!new File(element.getMetaFilePath()).delete())
-				logger.log(Level.WARNING, "Could not delete old metadata file " + element.getMetaFilePath());
+			if (existingSEName == 0) {
+				writer.write("seName" + ": " + element.getSeName() + "\n");
+			}
 
-			if (!new File(intermediatePath).renameTo(new File(destPath)))
-				logger.log(Level.WARNING, "Could not rename the metadata file " + intermediatePath);
-		} else {
-			Main.moveFile(logger, srcPath, destPath);
+			if (existingseioDaemons == 0) {
+				writer.write("seioDaemons" + ": " + element.getSeioDaemons() + "\n");
+			}
 		}
+
+		if (!new File(element.getMetaFilePath()).delete())
+			logger.log(Level.WARNING, "Could not delete old metadata file " + element.getMetaFilePath());
+
+		if (!new File(intermediatePath).renameTo(new File(destPath)))
+			logger.log(Level.WARNING, "Could not rename the metadata file " + intermediatePath);
 
 		if (!element.getFile().delete()) {
 			logger.log(Level.WARNING, "Could not delete source file "
@@ -184,10 +205,13 @@ class Spooler extends FileOperator {
 
 	private static boolean transfer(FileElement element) {
 		try {
-			SE se = new SE(element.getSeName(), 1, "", "", element.getSeioDaemons());
+			Pair<String, String> storage = Main.getActiveStorage();
+			String seName = storage.getFirst();
+			String seioDaemons = storage.getSecond();
+			SE se = new SE(seName, 1, "", "", seioDaemons);
 			GUID guid = new GUID(element.getGuid());
 			guid.size = element.getSize();
-			PFN pfn = new PFN(element.getSeioDaemons() + "/" + element.getSurl(), guid, se);
+			PFN pfn = new PFN(seioDaemons + "/" + element.getSurl(), guid, se);
 			double transfer_time = 0;
 
 			try (Timing t = new Timing(monitor, "transfer_execution_time")) {
@@ -205,7 +229,7 @@ class Spooler extends FileOperator {
 				transfer_time = t.getSeconds();
 			}
 
-			onSuccess(element, transfer_time);
+			onSuccess(element, transfer_time, storage);
 			return true;
 		}
 		catch (IOException e) {

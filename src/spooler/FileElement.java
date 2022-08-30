@@ -35,8 +35,8 @@ class FileElement implements Delayed {
 	private final String LHCPeriod;
 	private final String metaFilePath;
 	private final String type;
-	private final String seName;
-	private final String seioDaemons;
+	private String seName;
+	private String seioDaemons;
 	private final String priority;
 	private final boolean isMetadata;
 	private final String TFOrbits;
@@ -158,6 +158,14 @@ class FileElement implements Delayed {
 
 	void setMd5(final String md5) {
 		this.md5 = md5;
+	}
+
+	public void setSeName(String seName) {
+		this.seName = seName;
+	}
+
+	public void setSeioDaemons(String seioDaemons) {
+		this.seioDaemons = seioDaemons;
 	}
 
 	@Override

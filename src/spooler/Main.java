@@ -57,8 +57,12 @@ public class Main {
 	static final String defaultErrorDir = "/data/epn2eos_tool/error";
 	static final String defaultLogsDir = "/data/epn2eos_tool/logs";
 	static final String defaultErrorRegDir = "/data/epn2eos_tool/errorReg";
-	static final String defaultSEName = "ALICE::CERN::EOSALICEO2";
-	static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
+	private static final String defaultSEName = "ALICE::CERN::EOSALICEO2";
+	private static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
+	private static final String fallbackSEName = "ALICE::CERN::EOSP2";
+	private static final String fallbackseioDaemons = "root://eosp2.cern.ch:1094";
+	private static final int defaultStorageThreshold = 25;
+	private static final long totalStorageSize = 4000000000000L;
 	static final boolean defaultMd5Enable = false;
 	static final int defaultMaxBackoff = 10;
 	static final int defaultTransferThreads = 4;
@@ -68,7 +72,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.26";
+	private static final String version = "v.1.27";
 
 	/**
 	 * Entry point
@@ -105,8 +109,12 @@ public class Main {
 		logger.log(Level.INFO, "Number of Transfer Threads: " + spoolerProperties.geti("queue.default.threads", defaultTransferThreads));
 		logger.log(Level.INFO, "Number of Registration Threads: " + spoolerProperties.geti("queue.reg.threads", defaultRegistrationThreads));
 
-		logger.log(Level.INFO, "Storage Element Name: " + spoolerProperties.gets("seName", defaultSEName));
-		logger.log(Level.INFO, "Storage Element seioDaemons: " + spoolerProperties.gets("seioDaemons", defaultseioDaemons));
+		logger.log(Level.INFO, "Default Storage Element Name: " + spoolerProperties.gets("defaultSEName", defaultSEName));
+		logger.log(Level.INFO, "Default Storage Element seioDaemons: " + spoolerProperties.gets("defaultseioDaemons", defaultseioDaemons));
+		logger.log(Level.INFO, "Fallback Storage Element Name: " + spoolerProperties.gets("fallbackSEName", fallbackSEName));
+		logger.log(Level.INFO, "Fallback Storage Element seioDaemons: " + spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
+
+		logger.log(Level.INFO, "Storage threshold: " + spoolerProperties.geti("storageThreshold", defaultStorageThreshold));
 
 		ConfigUtils.setApplicationName("epn2eos");
 
@@ -181,6 +189,13 @@ public class Main {
 
 			names.add("version");
 			values.add(version);
+
+			Pair<Integer, String> storageStatus = getStorageStatus();
+			names.add("write_Status");
+			values.add(storageStatus.getFirst());
+
+			names.add("write_Message");
+			values.add(storageStatus.getSecond());
 		});
 
 		final Object lock = new Object();
@@ -372,5 +387,24 @@ public class Main {
 		catch (final IOException e) {
 			log.log(Level.WARNING, "Could not move metadata file: " + src, e.getMessage());
 		}
+	}
+
+	static Pair<String, String> getActiveStorage() {
+		long currentTransferQueuesSize = Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum());
+		long currentThreshold = spoolerProperties.geti("storageThreshold", defaultStorageThreshold) / 100 * totalStorageSize;
+
+		if (currentTransferQueuesSize > currentThreshold) {
+			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
+					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
+		}
+		return new Pair<>(spoolerProperties.gets("defaultSEName", defaultSEName),
+				spoolerProperties.gets("defaultseioDaemons", defaultseioDaemons));
+	}
+
+	private static Pair<Integer, String> getStorageStatus() {
+		String seName = getActiveStorage().getFirst();
+		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
+			return new Pair<>(1, "Writing to fallback storage " + seName);
+		return new Pair<>(0, null);
 	}
 }
