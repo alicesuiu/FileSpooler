@@ -212,6 +212,7 @@ class Spooler extends FileOperator {
 			GUID guid = new GUID(element.getGuid());
 			guid.size = element.getSize();
 			PFN pfn = new PFN(seioDaemons + "/" + element.getSurl(), guid, se);
+			logger.log(Level.INFO, "File " + element.getCurl() + " is transfered to the " + seName + " storage.");
 			double transfer_time = 0;
 
 			try (Timing t = new Timing(monitor, "transfer_execution_time")) {

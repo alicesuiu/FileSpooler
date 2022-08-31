@@ -392,9 +392,10 @@ public class Main {
 
 	static Pair<String, String> getActiveStorage() {
 		long currentTransferQueuesSize = Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum());
-		currentTransferQueuesSize /= (1024 * 1024 * 1024);
+		long currentThreshold = spoolerProperties.geti("storageThreshold", defaultStorageThreshold);
+		currentThreshold *= 1024 * 1024 * 1024;
 
-		if (currentTransferQueuesSize > spoolerProperties.geti("storageThreshold", defaultStorageThreshold)) {
+		if (currentTransferQueuesSize > currentThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
