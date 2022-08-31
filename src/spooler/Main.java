@@ -62,7 +62,6 @@ public class Main {
 	private static final String fallbackSEName = "ALICE::CERN::EOSP2";
 	private static final String fallbackseioDaemons = "root://eosp2.cern.ch:1094";
 	private static final int defaultStorageThreshold = 25;
-	private static final long totalStorageSize = 4000000000000L;
 	static final boolean defaultMd5Enable = false;
 	static final int defaultMaxBackoff = 10;
 	static final int defaultTransferThreads = 4;
@@ -194,8 +193,10 @@ public class Main {
 			names.add("write_Status");
 			values.add(storageStatus.getFirst());
 
-			names.add("write_Message");
-			values.add(storageStatus.getSecond());
+			if (storageStatus.getFirst() == 1) {
+				names.add("write_Message");
+				values.add(storageStatus.getSecond());
+			}
 		});
 
 		final Object lock = new Object();
@@ -391,9 +392,9 @@ public class Main {
 
 	static Pair<String, String> getActiveStorage() {
 		long currentTransferQueuesSize = Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum());
-		long currentThreshold = spoolerProperties.geti("storageThreshold", defaultStorageThreshold) / 100 * totalStorageSize;
+		currentTransferQueuesSize /= (1024 * 1024 * 1024);
 
-		if (currentTransferQueuesSize > currentThreshold) {
+		if (currentTransferQueuesSize > spoolerProperties.geti("storageThreshold", defaultStorageThreshold)) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}

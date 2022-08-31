@@ -11,6 +11,7 @@
 <%@ page import="utils.ExpireTime" %>
 <%@ page import="alien.io.TransferUtils" %>
 <%@ page import="alien.se.SE" %>
+<%@ page import="alien.se.SEUtils" %>
 
 <%!private static final Object lock = new Object();
 	private static PrintWriter pwLog = null;
@@ -243,11 +244,10 @@
 			}
 		}
 
+		String defaultSEName = "ALICE::CERN::EOSALICEO2";
 		String fallbackSEName = "ALICE::CERN::EOSP2";
 		if (seName.contains(fallbackSEName)) {
-			String defaultSEName = "ALICE::CERN::EOSALICEO2";
-			String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
-			SE se = new SE(defaultSEName, 1, "", "", defaultseioDaemons);
+			SE se = SEUtils.getSE(defaultSEName);
 			LFN lfn = LFNUtils.getLFN(curl);
 			TransferUtils.mirror(lfn, se, fallbackSEName, 100);
 		}
