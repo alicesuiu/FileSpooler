@@ -9,6 +9,9 @@
 <%@ page import="java.io.FileWriter" %>
 <%@ page import="java.util.UUID" %>
 <%@ page import="utils.ExpireTime" %>
+<%@ page import="alien.io.TransferUtils" %>
+<%@ page import="alien.se.SE" %>
+<%@ page import="alien.se.SEUtils" %>
 
 <%!private static final Object lock = new Object();
 	private static PrintWriter pwLog = null;
@@ -239,6 +242,14 @@
 				code = HttpServletResponse.SC_SERVICE_UNAVAILABLE;
 				return;
 			}
+		}
+
+		String defaultSEName = "ALICE::CERN::EOSALICEO2";
+		String fallbackSEName = "ALICE::CERN::EOSP2";
+		if (seName.contains(fallbackSEName)) {
+			SE se = SEUtils.getSE(defaultSEName);
+			LFN lfn = LFNUtils.getLFN(curl);
+			TransferUtils.mirror(lfn, se, fallbackSEName, 100);
 		}
 	} finally {
 		lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?lfn=" + curl + "&pfn=" + pfn + "&size=" + size, code, request);

@@ -324,16 +324,6 @@ class FileWatcher implements Runnable {
 				writeFile.write("curl" + ": " + curl + "\n");
 			}
 
-			if (seName == null || seName.isBlank()) {
-				seName = Main.spoolerProperties.gets("seName", Main.defaultSEName);
-				writeFile.write("seName" + ": " + seName + "\n");
-			}
-
-			if (seioDaemons == null || seioDaemons.isBlank()) {
-				seioDaemons = Main.spoolerProperties.gets("seioDaemons", Main.defaultseioDaemons);
-				writeFile.write("seioDaemons" + ": " + seioDaemons + "\n");
-			}
-
 			if (priority == null || priority.isBlank()) {
 				priority = "low";
 				writeFile.write("priority" + ": " + priority + "\n");
