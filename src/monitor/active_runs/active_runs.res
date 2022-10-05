@@ -20,6 +20,7 @@
 		    <th class="table_header_stats" width=80><b>Files</b></th>
 		    <th class="table_header_stats" width=80><b>Total size</b></th>
 		    <th class="table_header_stats" width=80><b>ETA</b></th>
+		    <th class="table_header_stats" width=80><b>Last Seen</b></th>
 		</tr>
 		</thead>
 

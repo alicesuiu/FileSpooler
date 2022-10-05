@@ -1,58 +1,27 @@
+<%@ page import="alimonitor.Page" %>
+<%@ page import="policymaker.MonitorRun" %>
+<%@ page import="policymaker.MonitorRunUtils" %>
 <%@ page import="lia.Monitor.monitor.monPredicate" %>
-<%@ page import="lia.Monitor.Store.Cache" %>
 <%@ page import="lia.Monitor.monitor.TimestampedResult" %>
+<%@ page import="java.util.*" %>
+<%@ page import="lia.Monitor.Store.Fast.DB" %>
+<%@ page import="lia.Monitor.Store.Cache" %>
 <%@ page import="lia.Monitor.monitor.Result" %>
 <%@ page import="java.io.ByteArrayOutputStream" %>
-<%@ page import="alimonitor.Page" %>
-<%@ page import="java.util.*" %>
 <%!
-    private static final String SFARM = "alicdb3.cern.ch";
-    private static final class MonitorRun {
-        String run;
-        long cnt;
-        long size;
-        double eta;
-
-        public MonitorRun(String run, long cnt, long size, double eta) {
-            this.run = run;
-            this.cnt = cnt;
-            this.size = size;
-            this.eta = eta;
-        }
-
-        public void fillPage(final Page p){
-            p.modify("run", run);
-            p.modify("cnt", cnt);
-            p.modify("size", size);
-            p.modify("eta", eta);
-        }
+    private void fillPage(final Page p, MonitorRun mr){
+        p.modify("run", mr.getRun());
+        p.modify("cnt", mr.getCnt());
+        p.modify("size", mr.getSize());
+        p.modify("eta", mr.getEta());
+        p.modify("last_seen", mr.getLastSeen());
     }
 %>
 
 <%
-    monPredicate predRuns = new monPredicate(SFARM, "epn2eos", "*", -1, -1, new String[] {"*"}, null);
-    final Vector<TimestampedResult> activeRuns = Cache.getLastValues(predRuns);
-    Map<String, MonitorRun> activeMonitorRuns = new TreeMap<>();
+    Map<Long, MonitorRun> activeMonitorRuns = MonitorRunUtils.getActiveRuns();
 
-    if (activeRuns != null) {
-        for (final TimestampedResult tr : activeRuns) {
-            if (tr instanceof Result) {
-                Result res = (Result) tr;
-                final String run = res.param_name[0];
-                long value = Math.round(res.param[0]);
-
-                MonitorRun mr = activeMonitorRuns.computeIfAbsent(run, (k) -> new MonitorRun(k, 0, 0, 0));
-                if (res.NodeName.endsWith("_cnt")) {
-                    mr.cnt += value;
-                } else if (res.NodeName.endsWith("_size")) {
-                    mr.size += value;
-                }
-                activeMonitorRuns.put(run, mr);
-            }
-        }
-    }
-
-    monPredicate predRate = new monPredicate(SFARM, "ALIEN_spooler.Spooler_Nodes_Summary", "sum",
+    monPredicate predRate = new monPredicate("alicdb3.cern.ch", "ALIEN_spooler.Spooler_Nodes_Summary", "sum",
             -1, -1, new String[] {"nr_transmitted_bytes_R"}, null);
     final TimestampedResult tr = Cache.getLastValue(predRate);
     Result res = (Result) tr;
@@ -74,24 +43,33 @@
     long total_files = 0;
     long total_size = 0;
     List<MonitorRun> list = new LinkedList<>(activeMonitorRuns.values());
-    list.sort(Comparator.comparingLong(elem -> elem.size));
+    list.sort(Comparator.comparingLong(MonitorRun::getSize));
     final long total_runs = list.size();
+    DB db = new DB();
     while (!list.isEmpty()) {
         long nr_runs = list.size();
         double mr_rate = rate / nr_runs;
         MonitorRun mr = list.remove(0);
-        total_files += mr.cnt;
-        total_size += mr.size;
-        mr.eta += mr.size / mr_rate;
+        total_files += mr.getCnt();
+        total_size += mr.getSize();
+        double new_eta = mr.getEta() + mr.getSize() / mr_rate;
+        mr.setEta(new_eta);
 
         for (MonitorRun mr1 : list) {
-            mr1.size -= mr.size;
-            mr1.eta = mr.eta;
+            mr1.setSize(mr1.getSize() - mr.getSize());
+            mr1.setEta(mr.getEta());
+        }
+
+        if (mr.getCnt() == 0) {
+            db.query("select maxtime from rawdata_runs where run=" + mr.getRun() + ";");
+            mr.setLastSeen(db.geti(1));
+        } else {
+            mr.setLastSeen(System.currentTimeMillis());
         }
     }
 
     for (MonitorRun mr : activeMonitorRuns.values()) {
-        mr.fillPage(pLine);
+        fillPage(pLine, mr);
         p.append(pLine);
     }
 

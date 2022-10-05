@@ -3,4 +3,5 @@
 	<td nowrap align=right class="table_row"><<:cnt dot:>></td>
 	<td nowrap align=right class="table_row"><<:size size:>></td>
 	<td nowrap align=right class="table_row"><<:eta intervals:>></td>
+	<td nowrap align=right class="table_row"><<:last_seen nicedate:>></td>
 </tr>
