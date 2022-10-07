@@ -1,6 +1,7 @@
 package spooler;
 
 import alien.config.ConfigUtils;
+import lazyj.ExtProperties;
 
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -29,6 +30,8 @@ public class RotateHandler extends StreamHandler {
 
 	private FileOutputStream fileOutputStream;
 
+	private ExtProperties loggingProperties;
+	private static final String defaultLogsDir = "/data/epn2eos_tool/logs";
 	/**
 	 * @throws FileNotFoundException
 	 */
@@ -38,10 +41,11 @@ public class RotateHandler extends StreamHandler {
 		tomorrowStart = currentDate.toLocalDate().plusDays(1).atStartOfDay(z);
 
 		String hostname = ConfigUtils.getLocalHostname();
+		loggingProperties = ConfigUtils.getConfiguration("logging");
 		if (hostname == null || hostname.isBlank())
-			prefixPath = Main.defaultLogsDir;
+			prefixPath = defaultLogsDir;
 		else
-			prefixPath = "/home/jalien/epn2eos_logs/" + hostname;
+			prefixPath = loggingProperties.gets("logDir", defaultLogsDir) + "/" + hostname;
 
 		if (!Main.sanityCheckDir(Paths.get(prefixPath)))
 			return;
