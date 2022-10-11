@@ -162,6 +162,7 @@ public class RunInfoUtils {
 
         List<Long> dbRunsList = getSetOfRunsFromCertainSelect(select);
         List<Long> missingTimeO2End = new ArrayList<>();
+        List<Long> missingQualityFlag = new ArrayList<>();
         for (Long run : dbRunsList) {
             Map<String, Object> fields = getRunParamsForLogBook(String.valueOf(run));
             int status = sendRunInfoToLogBook(run, fields);
@@ -175,29 +176,23 @@ public class RunInfoUtils {
                     }
 
                     if (runInfo.getDaqGoodFlag() < 0) {
-                        logMessage("There is no run quality set for run " + run);
+                        missingQualityFlag.add(run);
                     }
 
-                    if (runInfo.getTimeO2End() == null || runInfo.getTimeO2End() == 0)
+                    if (runInfo.getTimeO2End() != null && runInfo.getTimeO2End() > 0) {
+                        logMessage(runInfo.toString());
+                        // todo: compute runDuration
+                        runInfo.processQuery();
+                    } else {
                         missingTimeO2End.add(run);
-
-                    logMessage(runInfo.toString());
-                    runInfo.processQuery();
-                    //todo: update cond with the new param from Logbook
-                /*if (runInfo.getTimeO2End() != null && runInfo.getTimeO2End() > 0) {
-                    logMessage(runInfo.toString());
-                    // todo: compute runDuration
-                    runInfo.processQuery();
-                } else {
-                    logMessage("This run has timeO2End set to zero");
-                }   */
+                    }
                 }
             } else {
                 logMessage("The PATCH request to the logbook did not work. We caught HTTP error code: " + status);
             }
         }
-
         logMessage("List of runs that have timeO2end null or 0 " + missingTimeO2End);
+        logMessage("List of runs that do not have the run quality flag set " + missingQualityFlag);
     }
 
     private static Map<String, Object> getRunParamsForLogBook(String run) {
