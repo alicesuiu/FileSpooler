@@ -20,9 +20,9 @@ import java.time.Duration;
 import java.util.*;
 
 public class RunInfoUtils {
-    //private static String URL_GET_RUN_INFO = "https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=";
+    private static String URL_GET_RUN_INFO = "https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=";
     private static String URL_PATCH_RUN_INFO = "http://guis-main.cern.ch:4000/api/runs/?runNumber=";
-    private static String URL_GET_RUN_INFO = "http://guis-main.cern.ch:4000/api/runs/?filter[runNumbers]=";
+    //private static String URL_GET_RUN_INFO = "http://guis-main.cern.ch:4000/api/runs/?filter[runNumbers]=";
 
     private static String encode(final String s) {
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
@@ -156,23 +156,24 @@ public class RunInfoUtils {
         return -1;
     }
 
-    public static void setRunInfo(long mintime, long maxtime) {
-        String select = "select run from rawdata_runs where mintime >= " + mintime + " and maxtime <= " + maxtime;
-        //+ " and daq_transfercomplete IS NULL limit 1;";
+    public static void fetchRunInfo(long mintime, long maxtime) {
+        String select = "select run from rawdata_runs where mintime >= " + mintime + " and maxtime <= " + maxtime
+                + " and daq_transfercomplete IS NULL;";
 
         List<Long> dbRunsList = getSetOfRunsFromCertainSelect(select);
         List<Long> missingTimeO2End = new ArrayList<>();
         List<Long> missingQualityFlag = new ArrayList<>();
+        List<Long> missingLogbookRecord = new ArrayList<>();
         for (Long run : dbRunsList) {
-            Map<String, Object> fields = getRunParamsForLogBook(String.valueOf(run));
+            /*Map<String, Object> fields = getRunParamsForLogBook(String.valueOf(run));
             int status = sendRunInfoToLogBook(run, fields);
-            if (status == HttpServletResponse.SC_OK) {
+            if (status == HttpServletResponse.SC_OK) {*/
                 Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
                 if (!runInfos.isEmpty()) {
                     RunInfo runInfo = runInfos.iterator().next();
                     if (runInfo.getRunNumber() == null) {
-                        logMessage("There is no record for run " + run + " in the Logbook");
-                        return;
+                        missingLogbookRecord.add(run);
+                        continue;
                     }
 
                     if (runInfo.getDaqGoodFlag() < 0) {
@@ -186,13 +187,20 @@ public class RunInfoUtils {
                     } else {
                         missingTimeO2End.add(run);
                     }
+                } else {
+                    missingLogbookRecord.add(run);
                 }
-            } else {
+            /*} else {
                 logMessage("The PATCH request to the logbook did not work. We caught HTTP error code: " + status);
-            }
+            }*/
         }
-        logMessage("List of runs that have timeO2end null or 0 " + missingTimeO2End);
-        logMessage("List of runs that do not have the run quality flag set " + missingQualityFlag);
+
+        if (!missingTimeO2End.isEmpty())
+            logMessage("List of runs that have timeO2end null or 0 " + missingTimeO2End + ", nr: " + missingTimeO2End.size());
+        if (!missingQualityFlag.isEmpty())
+            logMessage("List of runs that do not have the run quality flag set " + missingQualityFlag + ", nr: " + missingQualityFlag.size());
+        if (!missingLogbookRecord.isEmpty())
+            logMessage("List of runs that do not have a record in logbook " + missingLogbookRecord + ", nr: " + missingLogbookRecord.size());
     }
 
     private static Map<String, Object> getRunParamsForLogBook(String run) {

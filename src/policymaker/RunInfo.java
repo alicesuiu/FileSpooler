@@ -192,7 +192,7 @@ public class RunInfo {
             db.query(select);
             String partition = db.gets(1);
             values.put("daq_goodflag", daqGoodFlag);
-            //values.put("daq_transfercomplete", 1);
+            values.put("daq_transfercomplete", 1);
             values.put("run", runNumber);
             values.put("partition", partition);
             query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
