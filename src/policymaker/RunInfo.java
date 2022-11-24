@@ -21,6 +21,9 @@ public class RunInfo {
     private Long runDuration;
     private String aliceL3Polarity;
     private String aliceDipolePolarity;
+    private String beamType;
+    private Long lastModified;
+    private String lhcPeriod;
 
     public Long getRunNumber() {
         return runNumber;
@@ -30,24 +33,12 @@ public class RunInfo {
         this.runNumber = runNumber;
     }
 
-    public Long getFillNumber() {
-        return fillNumber;
-    }
-
     public void setFillNumber(Long fillNumber) {
         this.fillNumber = fillNumber;
     }
 
-    public Double getLhcBeamEnergy() {
-        return lhcBeamEnergy;
-    }
-
     public void setLhcBeamEnergy(Double lhcBeamEnergy) {
         this.lhcBeamEnergy = lhcBeamEnergy;
-    }
-
-    public String getLhcBeamMode() {
-        return lhcBeamMode;
     }
 
     public void setLhcBeamMode(String lhcBeamMode) {
@@ -62,16 +53,8 @@ public class RunInfo {
         this.runQuality = runQuality;
     }
 
-    public String getRunType() {
-        return runType;
-    }
-
     public void setRunType(String runType) {
         this.runType = runType;
-    }
-
-    public String getDetectors() {
-        return detectors;
     }
 
     public void setDetectors(String detectors) {
@@ -94,28 +77,36 @@ public class RunInfo {
         this.timeO2End = timeO2End;
     }
 
-    public Long getRunDuration() {
-        return runDuration;
-    }
-
     public void setRunDuration(Long runDuration) {
         this.runDuration = runDuration;
-    }
-
-    public String getAliceL3Polarity() {
-        return aliceL3Polarity;
     }
 
     public void setAliceL3Polarity(String aliceL3Polarity) {
         this.aliceL3Polarity = aliceL3Polarity;
     }
 
-    public String getAliceDipolePolarity() {
-        return aliceDipolePolarity;
-    }
-
     public void setAliceDipolePolarity(String aliceDipolePolarity) {
         this.aliceDipolePolarity = aliceDipolePolarity;
+    }
+
+    public void setBeamType(String beamType) {
+        this.beamType = beamType;
+    }
+
+    public void setLastModified(Long lastModified) {
+        this.lastModified = lastModified;
+    }
+
+    public Long getLastModified() {
+        return lastModified;
+    }
+
+    public String getLhcPeriod() {
+        return lhcPeriod;
+    }
+
+    public void setLhcPeriod(String lhcPeriod) {
+        this.lhcPeriod = lhcPeriod;
     }
 
     public int getDaqGoodFlag() {
@@ -128,6 +119,16 @@ public class RunInfo {
         if (runQuality.equalsIgnoreCase("test"))
             return 2;
         return -1;
+    }
+
+    private String getRunQuality(int daqGoodFlag) {
+        if (daqGoodFlag == 0)
+            return "bad";
+        if (daqGoodFlag == 1)
+            return "good";
+        if (daqGoodFlag == 2)
+            return "test";
+        return null;
     }
 
     public int getPolarity() {
@@ -177,6 +178,7 @@ public class RunInfo {
                 ", fillNumber: " + fillNumber +
                 ", lhcBeamEnergy: " + lhcBeamEnergy +
                 ", lhcBeamMode: '" + lhcBeamMode + '\'' +
+                ", beamType: '" + beamType + '\'' +
                 ", aliceDipolePolarity: '" + aliceDipolePolarity + '\'' +
                 ", aliceL3Polarity: '" + aliceL3Polarity + '\'' +
                 '}';
@@ -188,15 +190,26 @@ public class RunInfo {
         int daqGoodFlag = getDaqGoodFlag();
         Map<String, Object> values = new HashMap<>();
         if (daqGoodFlag >= 0) {
-            String select = "select partition from rawdata_runs where run = " + runNumber;
+            String select = "select daq_goodflag from rawdata_runs where run = " + runNumber;
+            db.query(select);
+            int existingDaqGoodFlag = db.geti("daq_goodflag", -1);
+            if (Arrays.asList(0, 1, 2).contains(existingDaqGoodFlag) && existingDaqGoodFlag != daqGoodFlag) {
+                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
+                        " select " + runNumber + ", 'change run quality', 'all', chunks, size, 'logbook', " +
+                        "'run quality was changed from " + getRunQuality(existingDaqGoodFlag) + " to " + runQuality +
+                        "' from rawdata_runs where run=" + runNumber + ";";
+
+                db.syncUpdateQuery(insert);
+            }
+            select = "select partition from rawdata_runs where run = " + runNumber;
             db.query(select);
             String partition = db.gets(1);
             values.put("daq_goodflag", daqGoodFlag);
             values.put("daq_transfercomplete", 1);
             values.put("run", runNumber);
             values.put("partition", partition);
+            values.put("beamtype", beamType);
             query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
-            //RunInfoUtils.logMessage(query);
             if (query != null)
                 db.query(query);
         }
@@ -207,21 +220,23 @@ public class RunInfo {
         values.put("fillno", fillNumber);
         values.put("energy", lhcBeamEnergy);
         values.put("detectors", detectors);
-        values.put("runduration", runDuration);
+        if (runDuration != null && runDuration <= Integer.MAX_VALUE)
+            values.put("runduration", runDuration);
         values.put("daq_time_start", timeO2Start);
         values.put("daq_time_end", timeO2End);
         values.put("lhcbeammode", lhcBeamMode);
         values.put("field", polarity);
         query = DBFunctions.composeUpsert("configuration", values, Set.of("run"));
-        //RunInfoUtils.logMessage(query);
         if (query != null)
             db.query(query);
 
         List<String> detectorsList = new ArrayList<>();
-        if (detectors.contains(",")) {
-            detectorsList = Arrays.asList(detectors.split(","));
-        } else {
-            detectorsList.add(detectors);
+        if (detectors != null) {
+            if (detectors.contains(",")) {
+                detectorsList = Arrays.asList(detectors.split(","));
+            } else {
+                detectorsList.add(detectors);
+            }
         }
 
         for (String detector : detectorsList) {
@@ -232,7 +247,6 @@ public class RunInfo {
             values.put("runtype", runType);
             values.put("instance", "PROD");
             query = DBFunctions.composeUpsert("shuttle", values, Set.of("run", "detector", "instance"));
-            //RunInfoUtils.logMessage(query);
             if (query != null)
                 db.query(query);
 
@@ -242,7 +256,6 @@ public class RunInfo {
             if (daqGoodFlag >= 0)
                 values.put("run_quality", daqGoodFlag);
             query = DBFunctions.composeUpsert("logbook_detectors", values, Set.of("run", "detector"));
-            //RunInfoUtils.logMessage(query);
             if (query != null)
                 db.query(query);
         }
@@ -254,7 +267,6 @@ public class RunInfo {
         values.put("runtype", runType);
         values.put("instance", "PROD");
         query = DBFunctions.composeUpsert("shuttle", values, Set.of("run", "detector", "instance"));
-        //RunInfoUtils.logMessage(query);
         if (query != null)
             db.query(query);
     }

@@ -1,11 +1,15 @@
 package policymaker;
 
+import alien.catalogue.LFN;
+import alien.catalogue.LFNUtils;
+import alien.config.ConfigUtils;
 import alien.user.JAKeyStore;
 import lazyj.Format;
 import lia.Monitor.Store.Fast.DB;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -16,20 +20,35 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.*;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.sql.Timestamp;
 
 public class RunInfoUtils {
     private static String URL_GET_RUN_INFO = "https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=";
-    private static String URL_PATCH_RUN_INFO = "http://guis-main.cern.ch:4000/api/runs/?runNumber=";
-    //private static String URL_GET_RUN_INFO = "http://guis-main.cern.ch:4000/api/runs/?filter[runNumbers]=";
+    private static String URL_PATCH_RUN_INFO = "https://ali-bookkeeping.cern.ch/api/runs/?runNumber=";
+    private static String URL_GET_CHANGES_RUN_INFO = "https://ali-bookkeeping.cern.ch/api/logs?filter[title]=has+changed";
+
+    private static String LOGBOOOK_TOKEN_TEST = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MCwidXNlcm5hbWUiOiJhbm9ueW1" +
+            "vdXMiLCJuYW1lIjoiQW5vbnltb3VzIiwiYWNjZXNzIjoiYWRtaW4iLCJpYXQiOjE2Njg2ODI5NTAsImV4cCI6MTcwMDI0MDU1MCwiaX" +
+            "NzIjoibzItdWkifQ.21BqUtJ1i13XIRldR0dyZLrq9jwzjfivWoEvL8c0Ot8";
+
+    private static String LOGBOOOK_TOKEN_PROD = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MCwidXNlcm5hbWUiOiJhbm9u" +
+            "eW1vdXMiLCJuYW1lIjoiQW5vbnltb3VzIiwiYWNjZXNzIjoiYWRtaW4iLCJpYXQiOjE2NjU5OTQyMTgsImV4cCI6MTY5NzU1MTgxOCwia" +
+            "XNzIjoibzItdWkifQ.zgrik9j1zn3NfyRlZrLBFHxDFdq5eiXH2IjJZFswl0M";
+    private static Logger logger = ConfigUtils.getLogger(RunInfoUtils.class.getCanonicalName());
 
     private static String encode(final String s) {
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }
 
-    public static Set<RunInfo> getRunInfoFromLogBook(String runs) {
-        Set<RunInfo> runInfoSet = new HashSet<>();
+    private static String getRunInfoLogBookRequest(String runs) {
+        String body = null;
         try {
             final KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509", "SunJSSE");
             kmf.init(JAKeyStore.getKeyStore(), JAKeyStore.pass);
@@ -47,20 +66,28 @@ public class RunInfoUtils {
                     .uri(URI.create(URL_GET_RUN_INFO + encode(String.valueOf(runs))))
                     .build();
 
-            HttpResponse<String> response =
-                    httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != HttpServletResponse.SC_OK)
-                return runInfoSet;
+                return null;
+            body = response.body();
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Communication error " + e);
+        }
+        return body;
+    }
 
-            JSONObject result = (JSONObject) new JSONParser().parse(response.body());
-
+    private static Set<RunInfo> parseRunInfoJSON(String response) {
+        Set<RunInfo> runInfoSet = new HashSet<>();
+        JSONObject result = null;
+        try {
+            result = (JSONObject) new JSONParser().parse(response);
             if (result != null) {
                 if (result.get("data") != null && result.get("data") instanceof JSONArray) {
                     JSONArray data = (JSONArray) result.get("data");
                     for (Object o : data) {
                         String runQuality = null, runType = null, detectors = null, lhcBeamMode = null,
-                                aliceL3Polarity = null, aliceDipolePolarity = null, beamType = null;
+                                aliceL3Polarity = null, aliceDipolePolarity = null, beamType = null, lhcPeriod = null;
                         Long timeO2Start = null, timeO2End = null, runNumber = null, fillNumber = null;
                         Double lhcBeamEnergy = null;
                         RunInfo runInfo = new RunInfo();
@@ -78,12 +105,12 @@ public class RunInfoUtils {
                             detectors = block.get("detectors").toString();
                         runInfo.setDetectors(detectors);
 
-                        if (block.get("timeO2Start") != null && block.get("timeO2Start") instanceof Number)
-                            timeO2Start = ((Number) block.get("timeO2Start")).longValue();
+                        if (block.get("startTime") != null && block.get("startTime") instanceof Number)
+                            timeO2Start = ((Number) block.get("startTime")).longValue();
                         runInfo.setTimeO2Start(timeO2Start);
 
-                        if (block.get("timeO2End") != null && block.get("timeO2End") instanceof Number)
-                            timeO2End = ((Number) block.get("timeO2End")).longValue();
+                        if (block.get("endTime") != null && block.get("endTime") instanceof Number)
+                            timeO2End = ((Number) block.get("endTime")).longValue();
                         runInfo.setTimeO2End(timeO2End);
 
                         if (block.get("fillNumber") != null && block.get("fillNumber") instanceof Number)
@@ -109,30 +136,85 @@ public class RunInfoUtils {
                         if (block.get("definition") != null && block.get("definition") instanceof String)
                             runType = block.get("definition").toString();
                         runInfo.setRunType(runType);
-                        runInfoSet.add(runInfo);
 
-                        /*if (block.get("lhcFill") != null && block.get("lhcFill") instanceof JSONObject) {
+                        if (block.get("lhcFill") != null && block.get("lhcFill") instanceof JSONObject) {
                             JSONObject lhcFill = (JSONObject) block.get("lhcFill");
                             if (lhcFill.get("beamType") != null && lhcFill.get("beamType") instanceof String)
                                 beamType = lhcFill.get("beamType").toString();
-                            logMessage("beam type for run " + runs + " is " + beamType);
-                        }*/
+                        }
+                        runInfo.setBeamType(beamType);
+
+                        if (block.get("lhcPeriod") != null && block.get("lhcPeriod") instanceof String)
+                            lhcPeriod = block.get("lhcPeriod").toString();
+                        runInfo.setLhcPeriod(lhcPeriod);
+
+                        runInfoSet.add(runInfo);
                     }
                 }
             }
-        } catch (IOException e) {
-            logMessage("Communication error " + e.getMessage());
-        } catch (Exception e) {
-            logMessage("Caught error while parsing the JSON response for run list " +  runs +  " " + e.getMessage());
+        } catch (ParseException ex) {
+            logger.log(Level.WARNING, "Caught error while parsing the JSON response " + response + " " + ex);
         }
+        return runInfoSet;
+    }
+
+    private static Set<RunInfo> parseRunInfoLogsJSON(String response) {
+        Set<RunInfo> runInfoSet = new HashSet<>();
+        JSONObject result = null;
+        try {
+            result = (JSONObject) new JSONParser().parse(response);
+            if (result != null) {
+                if (result.get("data") != null && result.get("data") instanceof JSONArray) {
+                    JSONArray data = (JSONArray) result.get("data");
+                    for (Object o : data) {
+                        Long createdAt = null, runNumber = null;
+                        JSONObject block = (JSONObject) o;
+                        if (block.get("createdAt") != null && block.get("createdAt") instanceof Number) {
+                            createdAt = ((Number) block.get("createdAt")).longValue();
+                            if (block.get("runs") != null && block.get("runs") instanceof JSONArray) {
+                                JSONArray runs = (JSONArray) block.get("runs");
+                                for (Object or : runs) {
+                                    RunInfo runInfo = new RunInfo();
+                                    JSONObject runBlock = (JSONObject) or;
+                                    if (runBlock.get("runNumber") != null && runBlock.get("runNumber") instanceof Number) {
+                                        runNumber = ((Number) runBlock.get("runNumber")).longValue();
+                                        runInfo.setRunNumber(runNumber);
+                                        runInfo.setLastModified(createdAt);
+                                        runInfoSet.add(runInfo);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (ParseException ex) {
+            logger.log(Level.WARNING, "Caught error while parsing the JSON response " + response + " " + ex);
+        }
+
+        return runInfoSet;
+    }
+
+    public static Set<RunInfo> getRunInfoFromLogBook(String runs) {
+        Set<RunInfo> runInfoSet = new HashSet<>();
+        String response = getRunInfoLogBookRequest(runs);
+        if (response != null)
+            runInfoSet = parseRunInfoJSON(response);
         return runInfoSet;
     }
 
     public static int sendRunInfoToLogBook(Long run, Map<String, Object> fields) {
         try {
             String json = Format.toJSON(fields).toString();
+
+            final KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509", "SunJSSE");
+            kmf.init(JAKeyStore.getKeyStore(), JAKeyStore.pass);
+            final SSLContext context = SSLContext.getInstance("SSL");
+            context.init(kmf.getKeyManagers(), JAKeyStore.trusts, null);
+
             HttpClient httpClient = HttpClient.newBuilder()
                     .version(HttpClient.Version.HTTP_2)
+                    .sslContext(context)
                     .build();
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -144,31 +226,29 @@ public class RunInfoUtils {
             HttpResponse<String> response =
                     httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            logMessage("Response code for PATCH req for run " + run + " is " + response.statusCode());
             if (response.statusCode() != HttpServletResponse.SC_OK) {
-                logMessage("Response message for PATCH req for run " + run + " is " + response.body());
-                logMessage(json);
+                logger.log(Level.INFO, "Response code for PATCH req for run " + run + " is " + response.statusCode());
+                logger.log(Level.WARNING, "Response message for PATCH req for run " + run + " is " + response.body());
+                logger.log(Level.INFO, json);
             }
             return response.statusCode();
-        } catch (IOException | InterruptedException e) {
-            logMessage("Communication error " + e.getMessage());
+        } catch (IOException | InterruptedException | UnrecoverableKeyException | KeyManagementException | NoSuchProviderException |
+                NoSuchAlgorithmException | KeyStoreException e) {
+            logger.log(Level.WARNING,"Communication error " + e);
         }
         return -1;
     }
 
-    public static void fetchRunInfo(long mintime, long maxtime) {
-        String select = "select run from rawdata_runs where mintime >= " + mintime + " and maxtime <= " + maxtime
-                + " and daq_transfercomplete IS NULL;";
-
-        List<Long> dbRunsList = getSetOfRunsFromCertainSelect(select);
+    public static void fetchRunInfo(List<Long> runs) {
         List<Long> missingTimeO2End = new ArrayList<>();
         List<Long> missingQualityFlag = new ArrayList<>();
         List<Long> missingLogbookRecord = new ArrayList<>();
-        for (Long run : dbRunsList) {
-            /*Map<String, Object> fields = getRunParamsForLogBook(String.valueOf(run));
+        for (Long run : runs) {
+            Map<String, Object> fields = getRunParamsForLogBook(String.valueOf(run));
             int status = sendRunInfoToLogBook(run, fields);
-            if (status == HttpServletResponse.SC_OK) {*/
-                Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
+            Set<RunInfo> runInfos;
+            if (status == HttpServletResponse.SC_OK) {
+                runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
                 if (!runInfos.isEmpty()) {
                     RunInfo runInfo = runInfos.iterator().next();
                     if (runInfo.getRunNumber() == null) {
@@ -181,8 +261,9 @@ public class RunInfoUtils {
                     }
 
                     if (runInfo.getTimeO2End() != null && runInfo.getTimeO2End() > 0) {
-                        logMessage(runInfo.toString());
-                        // todo: compute runDuration
+                        if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0)
+                            runInfo.setRunDuration(runInfo.getTimeO2End() - runInfo.getTimeO2Start());
+                        logger.log(Level.INFO, runInfo.toString());
                         runInfo.processQuery();
                     } else {
                         missingTimeO2End.add(run);
@@ -190,17 +271,17 @@ public class RunInfoUtils {
                 } else {
                     missingLogbookRecord.add(run);
                 }
-            /*} else {
-                logMessage("The PATCH request to the logbook did not work. We caught HTTP error code: " + status);
-            }*/
+            } else {
+                logger.log(Level.WARNING, "The PATCH request to the logbook did not work. We caught HTTP error code: " + status);
+            }
         }
 
         if (!missingTimeO2End.isEmpty())
-            logMessage("List of runs that have timeO2end null or 0 " + missingTimeO2End + ", nr: " + missingTimeO2End.size());
+            logger.log(Level.WARNING, "Runs with missing timestamp information: " + missingTimeO2End + ", nr: " + missingTimeO2End.size());
         if (!missingQualityFlag.isEmpty())
-            logMessage("List of runs that do not have the run quality flag set " + missingQualityFlag + ", nr: " + missingQualityFlag.size());
+            logger.log(Level.WARNING,"Runs with missing run quality information: " + missingQualityFlag + ", nr: " + missingQualityFlag.size());
         if (!missingLogbookRecord.isEmpty())
-            logMessage("List of runs that do not have a record in logbook " + missingLogbookRecord + ", nr: " + missingLogbookRecord.size());
+            logger.log(Level.WARNING,"Runs with missing logbook records: " + missingLogbookRecord + ", nr: " + missingLogbookRecord.size());
     }
 
     private static Map<String, Object> getRunParamsForLogBook(String run) {
@@ -232,7 +313,7 @@ public class RunInfoUtils {
         return fields;
     }
 
-    private static List<Long> getSetOfRunsFromCertainSelect(String select) {
+    public static List<Long> getSetOfRunsFromCertainSelect(String select) {
         Map<Long, MonitorRun> activeRunsMap = MonitorRunUtils.getActiveRuns();
         Set<Long> activeRunsSet = new HashSet<>();
         for (Map.Entry<Long, MonitorRun> entry : activeRunsMap.entrySet()) {
@@ -251,11 +332,14 @@ public class RunInfoUtils {
         dbRunsList.removeAll(activeRunsSet);
         return dbRunsList;
     }
+
     public static void retrofitCountersInRawdataRuns(long mintime, long maxtime) {
         long ctfFileSize, tfFileSize, otherFileSize;
         int ctfFileCount, tfFileCount, otherFileCount;
 
-        String select = "select run from rawdata_runs where mintime >= " + mintime + " and maxtime <= " + maxtime;
+        String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
+                "ra.run=rr.run and action='delete' where action is null and mintime >= " + mintime +
+                " and maxtime <= " + maxtime + ";";
         List<Long> dbRunsList = getSetOfRunsFromCertainSelect(select);
         DB db = new DB();
 
@@ -284,12 +368,178 @@ public class RunInfoUtils {
         }
     }
 
-    public static void logMessage(final String message) {
-        String filePath = "/home/monalisa/MLrepository/lib/classes/asuiu/runInfo.log";
-        try (PrintWriter pwLog = new PrintWriter(new FileWriter(filePath, true))) {
-            pwLog.println(message);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    public static Set<RunInfo> getRunInfoChangesFromLogBook(long mintime, long maxtime) {
+        Set<RunInfo> runInfoSet = new HashSet<>();
+        try {
+            final KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509", "SunJSSE");
+            kmf.init(JAKeyStore.getKeyStore(), JAKeyStore.pass);
+            final SSLContext context = SSLContext.getInstance("SSL");
+            context.init(kmf.getKeyManagers(), JAKeyStore.trusts, null);
+
+            String url = URL_GET_CHANGES_RUN_INFO + "&filter[created][from]=" + encode(String.valueOf(mintime))
+                    + "&filter[created][to]=" + encode(String.valueOf(maxtime)) + "&token=" + LOGBOOOK_TOKEN_PROD;
+
+            HttpClient httpClient = HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_2)
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .sslContext(context)
+                    .build();
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .GET()
+                    .uri(URI.create(url))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != HttpServletResponse.SC_OK) {
+                logger.log(Level.INFO, "Response code for GET changes req for mintime " + mintime + " and maxtime "
+                        + maxtime + ": " + response.statusCode());
+                logger.log(Level.WARNING, "Response message for GET changes req for mintime " + mintime + " and maxtime "
+                        + maxtime + ": " + response.body());
+                return null;
+            }
+
+            runInfoSet = parseRunInfoLogsJSON(response.body());
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Communication error " + e);
         }
+
+        return runInfoSet;
     }
+
+    public static List<Long> getLastUpdatedRuns(long mintime, long maxtime) {
+        Set<RunInfo> runInfoSet = RunInfoUtils.getRunInfoChangesFromLogBook(mintime, maxtime);
+        List<Long> runs = new ArrayList<>();
+        if (runInfoSet != null) {
+            DB db = new DB();
+            for (RunInfo ri : runInfoSet) {
+                String select = "select rr.run, rr.lastmodified from rawdata_runs rr left outer join rawdata_runs_action " +
+                        "ra on ra.run=rr.run and action='delete' where action is null and rr.run=" + ri.getRunNumber() + ";";
+                db.query(select);
+                long lastModifiedDB = db.geti("lastmodified") * 1000L;
+                if (ri.getLastModified() > lastModifiedDB && lastModifiedDB > 0)
+                    runs.add(ri.getRunNumber());
+            }
+        }
+        return runs;
+    }
+
+    public static void deleteBadRuns() {
+        long lastmodified = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                .minusWeeks(4).toInstant().toEpochMilli() / 1000;
+        String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
+                "ra.run=rr.run and action='delete' where rr.run > 500000 and rr.run < 530000 and daq_goodflag = 0 " +
+                "and action is null and lastmodified <=" + lastmodified + ";";
+        List<Long> runs = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
+        for (Long run : runs) {
+            Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
+            if (!runInfos.isEmpty()) {
+                RunInfo runInfo = runInfos.iterator().next();
+                if (!runInfo.getRunQuality().equalsIgnoreCase("bad")) {
+                    logger.log(Level.WARNING, "The run quality for run " + run
+                            + "has been changed from bad to " + runInfo.getRunQuality());
+                    // todo update DB for this run
+                    runs.remove(run);
+                }
+            }
+        }
+        deleteRuns(runs);
+    }
+
+    public static void deleteRuns(List<Long> runs) {
+        DB db = new DB();
+        List<Long> unregisteredRuns = new ArrayList<>();
+        List<Long> missingCollection = new ArrayList<>();
+        List<Long> alreadyDeleted = new ArrayList<>();
+        List<Long> containsOtherFiles = new ArrayList<>();
+
+        for (Long run : runs) {
+            String prefix = "";
+            Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
+            if (!runInfos.isEmpty()) {
+                RunInfo runInfo = runInfos.iterator().next();
+                if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0) {
+                    Timestamp ts = new Timestamp(runInfo.getTimeO2Start());
+                    prefix = ts.getYear() + "/" + runInfo.getLhcPeriod() + "/";
+                }
+            }
+            String select = "select collection_path from rawdata_runs where run = " + run +
+                    " and collection_path like '%/alice/data/" + prefix + "%';";
+            db.query(select);
+            String collection_path = db.gets("collection_path");
+            if (collection_path == null) {
+                unregisteredRuns.add(run);
+                continue;
+            }
+
+            if (!collection_path.contains("collection")) {
+                missingCollection.add(run);
+                continue;
+            }
+
+            Set<LFN> lfns = new HashSet<>(LFNUtils
+                    .find(collection_path.replaceAll("collection", ""),"*", 0));
+
+            if (lfns.size() == 0) {
+                alreadyDeleted.add(run);
+                continue;
+            }
+
+            for (LFN lfn : lfns) {
+                if (!lfn.getName().endsWith(".tf") && !lfn.getName().endsWith(".root")) {
+                    containsOtherFiles.add(run);
+                    break;
+                }
+            }
+
+            if (containsOtherFiles.contains(run))
+                continue;
+
+            select = "select count(1), sum(size) from rawdata_details where run = " + run + ";";
+            db.query(select);
+            long count = db.getl("count");
+            long size = db.getl("size");
+
+            select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
+            db.query(select);
+            int iDaqGoodFlag = db.geti("daq_goodflag");
+            String sDaqGoodFlag = null;
+            if (iDaqGoodFlag == 0)
+                sDaqGoodFlag = "bad";
+            else if (iDaqGoodFlag == 1)
+                sDaqGoodFlag = "good";
+            else if (iDaqGoodFlag == 2)
+                sDaqGoodFlag = "test";
+
+            if (sDaqGoodFlag != null) {
+                String update = "update rawdata set status='deleted'" +
+                        " where ltrim(split_part(rawdata.lfn, '/'::text, 6), '0'::text)::integer=" + run;
+                db.syncUpdateQuery(update);
+                if (db.getLastError() != null) {
+                    logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
+                }
+
+                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
+                        "values (" + run + ", 'delete', 'all', " + count + ", " + size + ", 'Deletion Thread', '" +
+                        sDaqGoodFlag + " run')";
+                db.syncUpdateQuery(insert);
+                if (db.getLastError() != null) {
+                    logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
+                }
+
+                lfns.forEach(l -> l.delete(true, false));
+            }
+        }
+
+        if (!unregisteredRuns.isEmpty())
+            logger.log(Level.WARNING, "Unregistered runs: " + unregisteredRuns + ", nr: " + unregisteredRuns.size());
+        if (!missingCollection.isEmpty())
+            logger.log(Level.WARNING, "Runs with missing collection information: " + missingCollection + ", nr: " + missingCollection.size());
+        if (!alreadyDeleted.isEmpty())
+            logger.log(Level.WARNING, "Runs already deleted: " + alreadyDeleted + ", nr: " + alreadyDeleted.size());
+        if (!containsOtherFiles.isEmpty())
+            logger.log(Level.WARNING, "Runs with files other than TF and CTF: " + containsOtherFiles + ", nr: " + containsOtherFiles.size());
+    }
+
 }

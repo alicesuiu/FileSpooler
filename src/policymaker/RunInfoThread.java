@@ -1,12 +1,19 @@
 package policymaker;
 
+import alien.config.ConfigUtils;
+
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class RunInfoThread extends Thread {
     private final long DELTA = 300000; // 5 min in ms
+    private final long HOUR = 3600000; // 1 hour in ms
     private static RunInfoThread instance = null;
     private Object lock = new Object();
+    private static Logger logger = ConfigUtils.getLogger(RunInfoThread.class.getCanonicalName());
     private RunInfoThread() {
         super(RunInfoThread.class.getCanonicalName());
         setDaemon(true);
@@ -21,18 +28,48 @@ public class RunInfoThread extends Thread {
 
     @Override
     public void run() {
+        long updatedAt = 0;
         while (true) {
             long minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
                     .minusWeeks(1).toInstant().toEpochMilli() / 1000;
             long currentTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich")).toInstant().toEpochMilli();
             long maxTime = (currentTime - DELTA) / 1000;
 
-            RunInfoUtils.logMessage("mintime: " + minTime + ", maxtime: " + maxTime);
-            RunInfoUtils.fetchRunInfo(minTime, maxTime);
+            logger.log(Level.INFO, "mintime: " + minTime + ", maxtime: " + maxTime);
+
+            String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on"
+                + "ra.run=rr.run and action='delete' where mintime >= " + minTime + " and maxtime <= " + maxTime
+                + " and daq_transfercomplete IS NULL and action IS NULL;";
+
+            List<Long> newRuns = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
+            RunInfoUtils.fetchRunInfo(newRuns);
+
+            if (updatedAt == 0) {
+                minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                        .minusWeeks(4).toInstant().toEpochMilli();
+                maxTime = currentTime;
+                updatedAt = currentTime;
+                List<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                if (!updatedRuns.isEmpty()) {
+                    RunInfoUtils.fetchRunInfo(updatedRuns);
+                    logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
+                }
+            }
+
+            if (currentTime - updatedAt >= HOUR) {
+                minTime = updatedAt;
+                maxTime = currentTime;
+                updatedAt = currentTime;
+                List<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                if (!updatedRuns.isEmpty()) {
+                    RunInfoUtils.fetchRunInfo(updatedRuns);
+                    logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
+                }
+            }
 
             synchronized (lock) {
                 try {
-                    lock.wait(30 * 60 * 1000L);
+                    lock.wait(1 * 60 * 1000L);
                 } catch (@SuppressWarnings("unused") InterruptedException e) {
                     // ignore
                 }
