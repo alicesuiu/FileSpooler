@@ -531,8 +531,9 @@ public class RunInfoUtils {
                         lfnsIterator.remove();
                         continue;
                     }
-
-                    if (!lfn.getName().matches("^o2_ctf_.*root$") && !lfn.getName().matches("^o2_rawtf_.*tf$")) {
+                    String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
+                    logger.log(Level.INFO, "LFN: " + lfnName);
+                    if (!lfnName.matches("^o2_ctf_.*root$") && !lfnName.matches("^o2_rawtf_.*tf$")) {
                         containsOtherFiles.add(run);
                         break;
                     }
@@ -540,7 +541,7 @@ public class RunInfoUtils {
                 if (containsOtherFiles.contains(run))
                     continue;
 
-                select = "select count(1), sum(size) from rawdata_details where run = " + run + ";";
+                select = "select count(1), sum(size) as size from rawdata_details where run = " + run + ";";
                 db.query(select);
                 if (!db.moveNext())
                     continue;
