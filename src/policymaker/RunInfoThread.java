@@ -4,7 +4,7 @@ import alien.config.ConfigUtils;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,7 +31,7 @@ public class RunInfoThread extends Thread {
         long updatedAt = 0;
         while (true) {
             long minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                    .minusWeeks(1).toInstant().toEpochMilli() / 1000;
+                    .minusWeeks(5).toInstant().toEpochMilli() / 1000;
             long currentTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich")).toInstant().toEpochMilli();
             long maxTime = (currentTime - DELTA) / 1000;
 
@@ -41,15 +41,18 @@ public class RunInfoThread extends Thread {
                 + "ra.run=rr.run and action='delete' where mintime >= " + minTime + " and maxtime <= " + maxTime
                 + " and daq_transfercomplete IS NULL and action IS NULL;";
 
-            List<Long> newRuns = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
-            RunInfoUtils.fetchRunInfo(newRuns);
+            Set<Long> newRuns = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
+            if (!newRuns.isEmpty()) {
+                RunInfoUtils.fetchRunInfo(newRuns);
+                logger.log(Level.INFO, "List of new runs: " + newRuns + ", nr: " + newRuns.size());
+            }
 
             if (updatedAt == 0) {
                 minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                        .minusWeeks(4).toInstant().toEpochMilli();
+                        .minusWeeks(5).toInstant().toEpochMilli();
                 maxTime = currentTime;
                 updatedAt = currentTime;
-                List<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
                 if (!updatedRuns.isEmpty()) {
                     RunInfoUtils.fetchRunInfo(updatedRuns);
                     logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
@@ -60,7 +63,7 @@ public class RunInfoThread extends Thread {
                 minTime = updatedAt;
                 maxTime = currentTime;
                 updatedAt = currentTime;
-                List<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
                 if (!updatedRuns.isEmpty()) {
                     RunInfoUtils.fetchRunInfo(updatedRuns);
                     logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());

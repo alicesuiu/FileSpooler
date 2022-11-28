@@ -68,8 +68,11 @@ public class RunInfoUtils {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() != HttpServletResponse.SC_OK)
+            if (response.statusCode() != HttpServletResponse.SC_OK) {
+                logger.log(Level.WARNING, "Response code for GET req for run " + runs + " is " + response.statusCode());
+                logger.log(Level.WARNING, "Response message for GET req for run " + runs + " is " + response.body());
                 return null;
+            }
             body = response.body();
         } catch (Exception e) {
             logger.log(Level.WARNING, "Communication error " + e);
@@ -205,6 +208,9 @@ public class RunInfoUtils {
 
     public static int sendRunInfoToLogBook(Long run, Map<String, Object> fields) {
         try {
+            if (fields.isEmpty())
+                return -1;
+
             String json = Format.toJSON(fields).toString();
 
             final KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509", "SunJSSE");
@@ -227,7 +233,7 @@ public class RunInfoUtils {
                     httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != HttpServletResponse.SC_OK) {
-                logger.log(Level.INFO, "Response code for PATCH req for run " + run + " is " + response.statusCode());
+                logger.log(Level.WARNING, "Response code for PATCH req for run " + run + " is " + response.statusCode());
                 logger.log(Level.WARNING, "Response message for PATCH req for run " + run + " is " + response.body());
                 logger.log(Level.INFO, json);
             }
@@ -239,7 +245,7 @@ public class RunInfoUtils {
         return -1;
     }
 
-    public static void fetchRunInfo(List<Long> runs) {
+    public static void fetchRunInfo(Set<Long> runs) {
         List<Long> missingTimeO2End = new ArrayList<>();
         List<Long> missingQualityFlag = new ArrayList<>();
         List<Long> missingLogbookRecord = new ArrayList<>();
@@ -256,7 +262,7 @@ public class RunInfoUtils {
                         continue;
                     }
 
-                    if (runInfo.getDaqGoodFlag() < 0) {
+                    if (getDaqGoodFlag(runInfo.getRunQuality()) < 0) {
                         missingQualityFlag.add(run);
                     }
 
@@ -293,6 +299,9 @@ public class RunInfoUtils {
         String select = "select mintime, maxtime, tf_file_count, tf_file_size, ctf_file_count, ctf_file_size, " +
                 "other_file_count, other_file_size from rawdata_runs where run=" + run + ";";
         db.query(select);
+        if (!db.moveNext())
+            return fields;
+
         startOfDataTransfer = db.getl(1) * 1000;
         endOfDataTransfer = db.getl(2) * 1000;
         tfFileCount = db.geti(3);
@@ -313,7 +322,7 @@ public class RunInfoUtils {
         return fields;
     }
 
-    public static List<Long> getSetOfRunsFromCertainSelect(String select) {
+    public static Set<Long> getSetOfRunsFromCertainSelect(String select) {
         Map<Long, MonitorRun> activeRunsMap = MonitorRunUtils.getActiveRuns();
         Set<Long> activeRunsSet = new HashSet<>();
         for (Map.Entry<Long, MonitorRun> entry : activeRunsMap.entrySet()) {
@@ -322,11 +331,11 @@ public class RunInfoUtils {
             }
         }
 
-        List<Long> dbRunsList = new ArrayList<>();
+        Set<Long> dbRunsList = new HashSet<>();
         DB db = new DB();
         db.query(select);
         while (db.moveNext()) {
-            long run = db.geti(1);
+            long run = db.geti("run");
             dbRunsList.add(run);
         }
         dbRunsList.removeAll(activeRunsSet);
@@ -334,37 +343,47 @@ public class RunInfoUtils {
     }
 
     public static void retrofitCountersInRawdataRuns(long mintime, long maxtime) {
-        long ctfFileSize, tfFileSize, otherFileSize;
-        int ctfFileCount, tfFileCount, otherFileCount;
+        Long ctfFileSize = null, tfFileSize = null, otherFileSize = null;
+        Integer ctfFileCount = null, tfFileCount = null, otherFileCount = null;
 
         String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
                 "ra.run=rr.run and action='delete' where action is null and mintime >= " + mintime +
                 " and maxtime <= " + maxtime + ";";
-        List<Long> dbRunsList = getSetOfRunsFromCertainSelect(select);
+        Set<Long> dbRunsList = getSetOfRunsFromCertainSelect(select);
         DB db = new DB();
 
        for (Long run : dbRunsList) {
             String selectCTF = "select count(size), sum(size) from rawdata_details where run=" + run + " and lfn like '%/o2_ctf_%.root';";
             db.query(selectCTF);
-            ctfFileCount = db.geti(1);
-            ctfFileSize = db.getl(2);
+            if (db.moveNext()) {
+                ctfFileCount = db.geti(1);
+                ctfFileSize = db.getl(2);
+            }
 
             String selectTF = "select count(size), sum(size) from rawdata_details where run=" + run + " and lfn like '%/o2_rawtf_%.tf';";
             db.query(selectTF);
-            tfFileCount = db.geti(1);
-            tfFileSize = db.getl(2);
+            if (db.moveNext()) {
+                tfFileCount = db.geti(1);
+                tfFileSize = db.getl(2);
+            }
 
             String selectOther = "select count(size), sum(size) from rawdata_details where run=" + run
                     + " and lfn not like '%/o2_ctf_%.root' and lfn not like '%/o2_rawtf_%.tf';";
             db.query(selectOther);
-            otherFileCount = db.geti(1);
-            otherFileSize = db.getl(2);
+            if (db.moveNext()) {
+                otherFileCount = db.geti(1);
+                otherFileSize = db.getl(2);
+            }
 
-            String update = "UPDATE rawdata_runs SET tf_file_count=" + tfFileCount + ", tf_file_size=" + tfFileSize
-                    + ", ctf_file_count=" + ctfFileCount + ", ctf_file_size=" + ctfFileSize + ", other_file_count="
-                    + otherFileCount + ", other_file_size=" + otherFileSize + " WHERE run=" + run + ";";
+            if (ctfFileCount != null && tfFileCount != null && otherFileCount != null &&
+                ctfFileSize != null && tfFileSize != null && otherFileSize != null) {
+                String update = "UPDATE rawdata_runs SET tf_file_count=" + tfFileCount + ", tf_file_size=" + tfFileSize
+                        + ", ctf_file_count=" + ctfFileCount + ", ctf_file_size=" + ctfFileSize + ", other_file_count="
+                        + otherFileCount + ", other_file_size=" + otherFileSize + " WHERE run=" + run + ";";
 
-            db.syncUpdateQuery(update);
+                if (!db.syncUpdateQuery(update))
+                    logger.log(Level.WARNING, "Update in rawdata_runs for run " + run + " failed.");
+            }
         }
     }
 
@@ -393,7 +412,7 @@ public class RunInfoUtils {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != HttpServletResponse.SC_OK) {
-                logger.log(Level.INFO, "Response code for GET changes req for mintime " + mintime + " and maxtime "
+                logger.log(Level.WARNING, "Response code for GET changes req for mintime " + mintime + " and maxtime "
                         + maxtime + ": " + response.statusCode());
                 logger.log(Level.WARNING, "Response message for GET changes req for mintime " + mintime + " and maxtime "
                         + maxtime + ": " + response.body());
@@ -408,49 +427,78 @@ public class RunInfoUtils {
         return runInfoSet;
     }
 
-    public static List<Long> getLastUpdatedRuns(long mintime, long maxtime) {
+    public static Set<Long> getLastUpdatedRuns(long mintime, long maxtime) {
         Set<RunInfo> runInfoSet = RunInfoUtils.getRunInfoChangesFromLogBook(mintime, maxtime);
-        List<Long> runs = new ArrayList<>();
+        Set<Long> runs = new HashSet<>();
         if (runInfoSet != null) {
             DB db = new DB();
             for (RunInfo ri : runInfoSet) {
                 String select = "select rr.run, rr.lastmodified from rawdata_runs rr left outer join rawdata_runs_action " +
                         "ra on ra.run=rr.run and action='delete' where action is null and rr.run=" + ri.getRunNumber() + ";";
                 db.query(select);
-                long lastModifiedDB = db.geti("lastmodified") * 1000L;
-                if (ri.getLastModified() > lastModifiedDB && lastModifiedDB > 0)
-                    runs.add(ri.getRunNumber());
+                if (db.moveNext()) {
+                    long lastModifiedDB = db.geti("lastmodified") * 1000L;
+                    if (ri.getLastModified() > lastModifiedDB && lastModifiedDB > 0)
+                        runs.add(ri.getRunNumber());
+                }
             }
         }
         return runs;
     }
 
-    public static void deleteBadRuns() {
-        long lastmodified = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                .minusWeeks(4).toInstant().toEpochMilli() / 1000;
-        String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
-                "ra.run=rr.run and action='delete' where rr.run > 500000 and rr.run < 530000 and daq_goodflag = 0 " +
-                "and action is null and lastmodified <=" + lastmodified + ";";
-        List<Long> runs = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
-        for (Long run : runs) {
-            Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
-            if (!runInfos.isEmpty()) {
-                RunInfo runInfo = runInfos.iterator().next();
-                if (!runInfo.getRunQuality().equalsIgnoreCase("bad")) {
-                    logger.log(Level.WARNING, "The run quality for run " + run
-                            + "has been changed from bad to " + runInfo.getRunQuality());
-                    // todo update DB for this run
-                    runs.remove(run);
-                }
-            }
-        }
-        deleteRuns(runs);
+    public static int getDaqGoodFlag(String runQuality) {
+        if (runQuality == null)
+            return -1;
+        if (runQuality.equalsIgnoreCase("bad"))
+            return 0;
+        if (runQuality.equalsIgnoreCase("good"))
+            return 1;
+        if (runQuality.equalsIgnoreCase("test"))
+            return 2;
+        return -1;
     }
 
-    public static void deleteRuns(List<Long> runs) {
+    public static String getRunQuality(int daqGoodFlag) {
+        if (daqGoodFlag == 0)
+            return "bad";
+        if (daqGoodFlag == 1)
+            return "good";
+        if (daqGoodFlag == 2)
+            return "test";
+        return null;
+    }
+
+    public static void deleteRunsWithCertainRunQuality(String runQuality) {
+        int daqGoodFlag = getDaqGoodFlag(runQuality);
+        if (Arrays.asList(0, 1, 2).contains(daqGoodFlag)) {
+            long lastmodified = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                    .minusWeeks(4).toInstant().toEpochMilli() / 1000;
+            String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
+                    "ra.run=rr.run and action='delete' where rr.run > 500000 and rr.run < 530000 and daq_goodflag = " +
+                    daqGoodFlag + " and action is null and lastmodified <=" + lastmodified + ";";
+            Set<Long> runs = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
+            Iterator<Long> runsIterator = runs.iterator();
+            while (runsIterator.hasNext()) {
+                Long run = runsIterator.next();
+                Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
+                if (!runInfos.isEmpty()) {
+                    RunInfo runInfo = runInfos.iterator().next();
+                    if (!runInfo.getRunQuality().equalsIgnoreCase(runQuality)) {
+                        logger.log(Level.WARNING, "The run quality for run " + run
+                                + "has been changed from bad to " + runInfo.getRunQuality());
+                        // todo update DB for this run
+                        runsIterator.remove();
+                    }
+                }
+            }
+            deleteRuns(runs);
+        } else {
+            logger.log(Level.WARNING, "The run quality " + runQuality + " is invalid.");
+        }
+    }
+
+    private static void deleteRuns(Set<Long> runs) {
         DB db = new DB();
-        List<Long> unregisteredRuns = new ArrayList<>();
-        List<Long> missingCollection = new ArrayList<>();
         List<Long> alreadyDeleted = new ArrayList<>();
         List<Long> containsOtherFiles = new ArrayList<>();
 
@@ -459,83 +507,81 @@ public class RunInfoUtils {
             Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
             if (!runInfos.isEmpty()) {
                 RunInfo runInfo = runInfos.iterator().next();
-                if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0) {
+                if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0 && runInfo.getLhcPeriod() != null) {
                     Timestamp ts = new Timestamp(runInfo.getTimeO2Start());
-                    prefix = ts.getYear() + "/" + runInfo.getLhcPeriod() + "/";
+                    prefix = ts.getYear() + "/" + runInfo.getLhcPeriod() + "/" + run;
                 }
             }
             String select = "select collection_path from rawdata_runs where run = " + run +
-                    " and collection_path like '%/alice/data/" + prefix + "%';";
+                    " and collection_path like '%/alice/data/" + prefix + "%/collection';";
             db.query(select);
-            String collection_path = db.gets("collection_path");
-            if (collection_path == null) {
-                unregisteredRuns.add(run);
-                continue;
-            }
-
-            if (!collection_path.contains("collection")) {
-                missingCollection.add(run);
-                continue;
-            }
-
-            Set<LFN> lfns = new HashSet<>(LFNUtils
-                    .find(collection_path.replaceAll("collection", ""),"*", 0));
-
-            if (lfns.size() == 0) {
-                alreadyDeleted.add(run);
-                continue;
-            }
-
-            for (LFN lfn : lfns) {
-                if (!lfn.getName().endsWith(".tf") && !lfn.getName().endsWith(".root")) {
-                    containsOtherFiles.add(run);
-                    break;
-                }
-            }
-
-            if (containsOtherFiles.contains(run))
-                continue;
-
-            select = "select count(1), sum(size) from rawdata_details where run = " + run + ";";
-            db.query(select);
-            long count = db.getl("count");
-            long size = db.getl("size");
-
-            select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
-            db.query(select);
-            int iDaqGoodFlag = db.geti("daq_goodflag");
-            String sDaqGoodFlag = null;
-            if (iDaqGoodFlag == 0)
-                sDaqGoodFlag = "bad";
-            else if (iDaqGoodFlag == 1)
-                sDaqGoodFlag = "good";
-            else if (iDaqGoodFlag == 2)
-                sDaqGoodFlag = "test";
-
-            if (sDaqGoodFlag != null) {
-                String update = "update rawdata set status='deleted'" +
-                        " where ltrim(split_part(rawdata.lfn, '/'::text, 6), '0'::text)::integer=" + run;
-                db.syncUpdateQuery(update);
-                if (db.getLastError() != null) {
-                    logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
+            while (db.moveNext()) {
+                String collection_path = db.gets("collection_path");
+                Set<LFN> lfns = new HashSet<>(LFNUtils
+                        .find(collection_path.replaceAll("collection", ""),"*", 0));
+                if (lfns.size() == 0) {
+                    alreadyDeleted.add(run);
+                    continue;
                 }
 
-                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
-                        "values (" + run + ", 'delete', 'all', " + count + ", " + size + ", 'Deletion Thread', '" +
-                        sDaqGoodFlag + " run')";
-                db.syncUpdateQuery(insert);
-                if (db.getLastError() != null) {
-                    logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
-                }
+                Iterator<LFN> lfnsIterator = lfns.iterator();
+                while (lfnsIterator.hasNext()) {
+                    LFN lfn = lfnsIterator.next();
+                    if (!lfn.isFile()) {
+                        lfnsIterator.remove();
+                        continue;
+                    }
 
-                lfns.forEach(l -> l.delete(true, false));
+                    if (!lfn.getName().matches("^o2_ctf_.*root$") && !lfn.getName().matches("^o2_rawtf_.*tf$")) {
+                        containsOtherFiles.add(run);
+                        break;
+                    }
+                }
+                if (containsOtherFiles.contains(run))
+                    continue;
+
+                select = "select count(1), sum(size) from rawdata_details where run = " + run + ";";
+                db.query(select);
+                if (!db.moveNext())
+                    continue;
+                long count = db.getl("count");
+                long size = db.getl("size");
+
+                select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
+                db.query(select);
+                if (!db.moveNext())
+                    continue;
+                int iDaqGoodFlag = db.geti("daq_goodflag");
+                String sDaqGoodFlag = getRunQuality(iDaqGoodFlag);
+                if (sDaqGoodFlag != null) {
+                    lfnsIterator = lfns.iterator();
+                    boolean status = true;
+                    while (lfnsIterator.hasNext()) {
+                        LFN l = lfnsIterator.next();
+                        if (!l.delete(true, false)) {
+                            status = false;
+                            continue;
+                        }
+
+                        String update = "update rawdata set status='deleted'" +
+                                " where lfn = '" + l.getCanonicalName() + "';";
+                        if (!db.syncUpdateQuery(update)) {
+                            logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
+                        }
+                    }
+
+                    if (status) {
+                        String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
+                                "values (" + run + ", 'delete', 'all', " + count + ", " + size + ", 'Deletion Thread', '" +
+                                sDaqGoodFlag + " run')";
+                        if (!db.syncUpdateQuery(insert)) {
+                            logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
+                        }
+                    }
+                }
             }
         }
 
-        if (!unregisteredRuns.isEmpty())
-            logger.log(Level.WARNING, "Unregistered runs: " + unregisteredRuns + ", nr: " + unregisteredRuns.size());
-        if (!missingCollection.isEmpty())
-            logger.log(Level.WARNING, "Runs with missing collection information: " + missingCollection + ", nr: " + missingCollection.size());
         if (!alreadyDeleted.isEmpty())
             logger.log(Level.WARNING, "Runs already deleted: " + alreadyDeleted + ", nr: " + alreadyDeleted.size());
         if (!containsOtherFiles.isEmpty())

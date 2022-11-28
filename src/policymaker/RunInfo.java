@@ -109,28 +109,6 @@ public class RunInfo {
         this.lhcPeriod = lhcPeriod;
     }
 
-    public int getDaqGoodFlag() {
-        if (runQuality == null)
-            return -1;
-        if (runQuality.equalsIgnoreCase("bad"))
-            return 0;
-        if (runQuality.equalsIgnoreCase("good"))
-            return 1;
-        if (runQuality.equalsIgnoreCase("test"))
-            return 2;
-        return -1;
-    }
-
-    private String getRunQuality(int daqGoodFlag) {
-        if (daqGoodFlag == 0)
-            return "bad";
-        if (daqGoodFlag == 1)
-            return "good";
-        if (daqGoodFlag == 2)
-            return "test";
-        return null;
-    }
-
     public int getPolarity() {
         String polarity;
 
@@ -187,35 +165,9 @@ public class RunInfo {
     public void processQuery() {
         DB db = new DB();
         String query;
-        int daqGoodFlag = getDaqGoodFlag();
         Map<String, Object> values = new HashMap<>();
-        if (daqGoodFlag >= 0) {
-            String select = "select daq_goodflag from rawdata_runs where run = " + runNumber;
-            db.query(select);
-            int existingDaqGoodFlag = db.geti("daq_goodflag", -1);
-            if (Arrays.asList(0, 1, 2).contains(existingDaqGoodFlag) && existingDaqGoodFlag != daqGoodFlag) {
-                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
-                        " select " + runNumber + ", 'change run quality', 'all', chunks, size, 'logbook', " +
-                        "'run quality was changed from " + getRunQuality(existingDaqGoodFlag) + " to " + runQuality +
-                        "' from rawdata_runs where run=" + runNumber + ";";
-
-                db.syncUpdateQuery(insert);
-            }
-            select = "select partition from rawdata_runs where run = " + runNumber;
-            db.query(select);
-            String partition = db.gets(1);
-            values.put("daq_goodflag", daqGoodFlag);
-            values.put("daq_transfercomplete", 1);
-            values.put("run", runNumber);
-            values.put("partition", partition);
-            values.put("beamtype", beamType);
-            query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
-            if (query != null)
-                db.query(query);
-        }
-
+        int daqGoodFlag = RunInfoUtils.getDaqGoodFlag(runQuality);
         int polarity = getPolarity();
-        values.clear();
         values.put("run", runNumber);
         values.put("fillno", fillNumber);
         values.put("energy", lhcBeamEnergy);
@@ -227,8 +179,10 @@ public class RunInfo {
         values.put("lhcbeammode", lhcBeamMode);
         values.put("field", polarity);
         query = DBFunctions.composeUpsert("configuration", values, Set.of("run"));
-        if (query != null)
-            db.query(query);
+        if (query == null)
+            return;
+        if (!db.query(query))
+            return;
 
         List<String> detectorsList = new ArrayList<>();
         if (detectors != null) {
@@ -247,8 +201,10 @@ public class RunInfo {
             values.put("runtype", runType);
             values.put("instance", "PROD");
             query = DBFunctions.composeUpsert("shuttle", values, Set.of("run", "detector", "instance"));
-            if (query != null)
-                db.query(query);
+            if (query == null)
+                return;
+            if (!db.query(query))
+                return;
 
             values.clear();
             values.put("run", runNumber);
@@ -256,8 +212,10 @@ public class RunInfo {
             if (daqGoodFlag >= 0)
                 values.put("run_quality", daqGoodFlag);
             query = DBFunctions.composeUpsert("logbook_detectors", values, Set.of("run", "detector"));
-            if (query != null)
-                db.query(query);
+            if (query == null)
+                return;
+            if (!db.query(query))
+                return;
         }
 
         values.clear();
@@ -267,7 +225,41 @@ public class RunInfo {
         values.put("runtype", runType);
         values.put("instance", "PROD");
         query = DBFunctions.composeUpsert("shuttle", values, Set.of("run", "detector", "instance"));
-        if (query != null)
-            db.query(query);
+        if (query == null)
+            return;
+        if (!db.query(query))
+            return;
+
+        if (daqGoodFlag >= 0) {
+            String select = "select daq_goodflag from rawdata_runs where run = " + runNumber;
+            db.query(select);
+            if (!db.moveNext())
+                return;
+            int existingDaqGoodFlag = db.geti("daq_goodflag", -1);
+            if (Arrays.asList(0, 1, 2).contains(existingDaqGoodFlag) && existingDaqGoodFlag != daqGoodFlag) {
+                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
+                        " select " + runNumber + ", 'change run quality', 'all', chunks, size, 'logbook', " +
+                        "'run quality was changed from " + RunInfoUtils.getRunQuality(existingDaqGoodFlag) + " to " + runQuality +
+                        "' from rawdata_runs where run=" + runNumber + ";";
+
+                if (!db.syncUpdateQuery(insert))
+                    return;
+            }
+            select = "select partition from rawdata_runs where run = " + runNumber;
+            db.query(select);
+            if (!db.moveNext())
+                return;
+            String partition = db.gets(1);
+            values.put("daq_goodflag", daqGoodFlag);
+            values.put("daq_transfercomplete", 1);
+            values.put("run", runNumber);
+            values.put("partition", partition);
+            values.put("beamtype", beamType);
+            query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
+            if (query == null)
+                return;
+            if (!db.query(query))
+                return;
+        }
     }
 }
