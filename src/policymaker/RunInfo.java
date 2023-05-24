@@ -24,6 +24,14 @@ public class RunInfo {
     private String beamType;
     private Long lastModified;
     private String lhcPeriod;
+    private Integer ctfFileCount;
+    private Integer tfFileCount;
+    private Integer otherFileCount;
+    private String ctfFileSize;
+    private String tfFileSize;
+    private String otherFileSize;
+    private Long startOfDataTransfer;
+    private Long endOfDataTransfer;
 
     public Long getRunNumber() {
         return runNumber;
@@ -109,6 +117,38 @@ public class RunInfo {
         this.lhcPeriod = lhcPeriod;
     }
 
+    public void setCtfFileCount(Integer ctfFileCount) {
+        this.ctfFileCount = ctfFileCount;
+    }
+
+    public void setTfFileCount(Integer tfFileCount) {
+        this.tfFileCount = tfFileCount;
+    }
+
+    public void setOtherFileCount(Integer otherFileCount) {
+        this.otherFileCount = otherFileCount;
+    }
+
+    public void setCtfFileSize(String ctfFileSize) {
+        this.ctfFileSize = ctfFileSize;
+    }
+
+    public void setTfFileSize(String tfFileSize) {
+        this.tfFileSize = tfFileSize;
+    }
+
+    public void setOtherFileSize(String otherFileSize) {
+        this.otherFileSize = otherFileSize;
+    }
+
+    public void setStartOfDataTransfer(Long startOfDataTransfer) {
+        this.startOfDataTransfer = startOfDataTransfer;
+    }
+
+    public void setEndOfDataTransfer(Long endOfDataTransfer) {
+        this.endOfDataTransfer = endOfDataTransfer;
+    }
+
     public int getPolarity() {
         String polarity;
 
@@ -159,6 +199,14 @@ public class RunInfo {
                 ", beamType: '" + beamType + '\'' +
                 ", aliceDipolePolarity: '" + aliceDipolePolarity + '\'' +
                 ", aliceL3Polarity: '" + aliceL3Polarity + '\'' +
+                ", startOfDataTransfer: " + startOfDataTransfer +
+                ", endOfDataTransfer: " + endOfDataTransfer +
+                ", ctfFileSize: '" + ctfFileSize + '\'' +
+                ", ctfFileCount: " + ctfFileCount +
+                ", tfFileSize: '" + tfFileSize + '\'' +
+                ", tfFileCount: " + tfFileCount +
+                ", otherFileSize: '" + otherFileSize + '\'' +
+                ", otherFileCount: " + otherFileCount +
                 '}';
     }
 
@@ -233,33 +281,36 @@ public class RunInfo {
         if (daqGoodFlag >= 0) {
             String select = "select daq_goodflag from rawdata_runs where run = " + runNumber;
             db.query(select);
-            if (!db.moveNext())
-                return;
-            int existingDaqGoodFlag = db.geti("daq_goodflag", -1);
-            if (Arrays.asList(0, 1, 2).contains(existingDaqGoodFlag) && existingDaqGoodFlag != daqGoodFlag) {
-                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
-                        " select " + runNumber + ", 'change run quality', 'all', chunks, size, 'logbook', " +
-                        "'run quality was changed from " + RunInfoUtils.getRunQuality(existingDaqGoodFlag) + " to " + runQuality +
-                        "' from rawdata_runs where run=" + runNumber + ";";
+            while (db.moveNext()) {
+                int existingDaqGoodFlag = db.geti("daq_goodflag", -1);
+                if (Arrays.asList(0, 1, 2).contains(existingDaqGoodFlag) && Arrays.asList(0, 1, 2).contains(daqGoodFlag) && existingDaqGoodFlag != daqGoodFlag) {
+                    String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
+                            " select " + runNumber + ", 'change run quality', 'all', chunks, size, 'logbook', " +
+                            "'run quality was changed from " + RunInfoUtils.getRunQuality(existingDaqGoodFlag) + " to " + runQuality +
+                            "' from rawdata_runs where run=" + runNumber + ";";
 
-                if (!db.syncUpdateQuery(insert))
-                    return;
+                    if (!db.syncUpdateQuery(insert))
+                        return;
+                }
             }
             select = "select partition from rawdata_runs where run = " + runNumber;
             db.query(select);
-            if (!db.moveNext())
-                return;
-            String partition = db.gets(1);
-            values.put("daq_goodflag", daqGoodFlag);
-            values.put("daq_transfercomplete", 1);
-            values.put("run", runNumber);
-            values.put("partition", partition);
-            values.put("beamtype", beamType);
-            query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
-            if (query == null)
-                return;
-            if (!db.query(query))
-                return;
+            while (db.moveNext()) {
+                String partition = db.gets(1);
+                values.clear();
+                values.put("daq_goodflag", daqGoodFlag);
+                values.put("daq_transfercomplete", 1);
+                values.put("run", runNumber);
+                values.put("partition", partition);
+                values.put("beamtype", beamType);
+                query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
+                if (query == null)
+                    return;
+                if (!db.query(query))
+                    return;
+            }
         }
+
+        RunActionUtils.applyDefaultAction(runNumber);
     }
 }

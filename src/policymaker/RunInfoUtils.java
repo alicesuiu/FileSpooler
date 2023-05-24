@@ -2,10 +2,16 @@ package policymaker;
 
 import alien.catalogue.LFN;
 import alien.catalogue.LFNUtils;
+import alien.catalogue.GUIDUtils;
+import alien.catalogue.GUID;
 import alien.config.ConfigUtils;
+import alien.managers.TransferManager;
 import alien.user.JAKeyStore;
+import alien.se.SE;
+import alien.se.SEUtils;
 import lazyj.Format;
 import lia.Monitor.Store.Fast.DB;
+import lazyj.DBFunctions;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -27,7 +33,6 @@ import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.sql.Timestamp;
 
 public class RunInfoUtils {
     private static String URL_GET_RUN_INFO = "https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=";
@@ -90,9 +95,12 @@ public class RunInfoUtils {
                     JSONArray data = (JSONArray) result.get("data");
                     for (Object o : data) {
                         String runQuality = null, runType = null, detectors = null, lhcBeamMode = null,
-                                aliceL3Polarity = null, aliceDipolePolarity = null, beamType = null, lhcPeriod = null;
-                        Long timeO2Start = null, timeO2End = null, runNumber = null, fillNumber = null;
+                                aliceL3Polarity = null, aliceDipolePolarity = null, beamType = null, lhcPeriod = null,
+                                ctfFileSize = null, tfFileSize = null, otherFileSize = null;
+                        Long timeO2Start = null, timeO2End = null, runNumber = null, fillNumber = null,
+                                startOfDataTransfer = null, endOfDataTransfer = null;
                         Double lhcBeamEnergy = null;
+                        Integer ctfFileCount = null, tfFileCount = null, otherFileCount = null;
                         RunInfo runInfo = new RunInfo();
 
                         JSONObject block = (JSONObject) o;
@@ -150,6 +158,38 @@ public class RunInfoUtils {
                         if (block.get("lhcPeriod") != null && block.get("lhcPeriod") instanceof String)
                             lhcPeriod = block.get("lhcPeriod").toString();
                         runInfo.setLhcPeriod(lhcPeriod);
+
+                        if (block.get("startOfDataTransfer") != null && block.get("startOfDataTransfer") instanceof Number)
+                            startOfDataTransfer = ((Number) block.get("startOfDataTransfer")).longValue();
+                        runInfo.setStartOfDataTransfer(startOfDataTransfer);
+
+                        if (block.get("endOfDataTransfer") != null && block.get("endOfDataTransfer") instanceof Number)
+                            endOfDataTransfer = ((Number) block.get("endOfDataTransfer")).longValue();
+                        runInfo.setEndOfDataTransfer(endOfDataTransfer);
+
+                        if (block.get("ctfFileSize") != null && block.get("ctfFileSize") instanceof String)
+                            ctfFileSize = block.get("ctfFileSize").toString();
+                        runInfo.setCtfFileSize(ctfFileSize);
+
+                        if (block.get("tfFileSize") != null && block.get("tfFileSize") instanceof String)
+                            tfFileSize = block.get("tfFileSize").toString();
+                        runInfo.setTfFileSize(tfFileSize);
+
+                        if (block.get("otherFileSize") != null && block.get("otherFileSize") instanceof String)
+                            otherFileSize = block.get("otherFileSize").toString();
+                        runInfo.setOtherFileSize(otherFileSize);
+
+                        if (block.get("ctfFileCount") != null && block.get("ctfFileCount") instanceof Number)
+                            ctfFileCount = ((Number) block.get("ctfFileCount")).intValue();
+                        runInfo.setCtfFileCount(ctfFileCount);
+
+                        if (block.get("tfFileCount") != null && block.get("tfFileCount") instanceof Number)
+                            tfFileCount = ((Number) block.get("tfFileCount")).intValue();
+                        runInfo.setTfFileCount(tfFileCount);
+
+                        if (block.get("otherFileCount") != null && block.get("otherFileCount") instanceof Number)
+                            otherFileCount = ((Number) block.get("otherFileCount")).intValue();
+                        runInfo.setOtherFileCount(otherFileCount);
 
                         runInfoSet.add(runInfo);
                     }
@@ -239,7 +279,7 @@ public class RunInfoUtils {
             }
             return response.statusCode();
         } catch (IOException | InterruptedException | UnrecoverableKeyException | KeyManagementException | NoSuchProviderException |
-                NoSuchAlgorithmException | KeyStoreException e) {
+                 NoSuchAlgorithmException | KeyStoreException e) {
             logger.log(Level.WARNING,"Communication error " + e);
         }
         return -1;
@@ -352,7 +392,7 @@ public class RunInfoUtils {
         Set<Long> dbRunsList = getSetOfRunsFromCertainSelect(select);
         DB db = new DB();
 
-       for (Long run : dbRunsList) {
+        for (Long run : dbRunsList) {
             String selectCTF = "select count(size), sum(size) from rawdata_details where run=" + run + " and lfn like '%/o2_ctf_%.root';";
             db.query(selectCTF);
             if (db.moveNext()) {
@@ -376,7 +416,7 @@ public class RunInfoUtils {
             }
 
             if (ctfFileCount != null && tfFileCount != null && otherFileCount != null &&
-                ctfFileSize != null && tfFileSize != null && otherFileSize != null) {
+                    ctfFileSize != null && tfFileSize != null && otherFileSize != null) {
                 String update = "UPDATE rawdata_runs SET tf_file_count=" + tfFileCount + ", tf_file_size=" + tfFileSize
                         + ", ctf_file_count=" + ctfFileCount + ", ctf_file_size=" + ctfFileSize + ", other_file_count="
                         + otherFileCount + ", other_file_size=" + otherFileSize + " WHERE run=" + run + ";";
@@ -468,15 +508,36 @@ public class RunInfoUtils {
         return null;
     }
 
+    public static String getRunQualityFromDB(Long run) {
+        String select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
+        DB db = new DB(select);
+        int iDaqGoodFlag = db.geti("daq_goodflag", -1);
+        return getRunQuality(iDaqGoodFlag);
+    }
+
+    public static String getRunQualityFromLogbook(Long run) {
+        String runQuality = null;
+        Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
+        if (!runInfos.isEmpty()) {
+            RunInfo runInfo = runInfos.iterator().next();
+            runQuality = runInfo.getRunQuality();
+        }
+        return runQuality;
+    }
+
     public static void deleteRunsWithCertainRunQuality(String runQuality) {
         int daqGoodFlag = getDaqGoodFlag(runQuality);
         if (Arrays.asList(0, 1, 2).contains(daqGoodFlag)) {
             long lastmodified = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
                     .minusWeeks(4).toInstant().toEpochMilli() / 1000;
+            long mintime = 1633039200; // 1.10.2021
+            long maxtime = 1669158000; // 23.11.2022
             String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
-                    "ra.run=rr.run and action='delete' where rr.run > 500000 and rr.run < 530000 and daq_goodflag = " +
-                    daqGoodFlag + " and action is null and lastmodified <=" + lastmodified + ";";
+                    "ra.run=rr.run and action='delete' where mintime >= " + mintime + " and daq_goodflag = " +
+                    daqGoodFlag + " and action is null and maxtime <= " + maxtime + ";"; // and lastmodified <=" + lastmodified + ";";
             Set<Long> runs = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
+            Set<Long> updatedRuns = new HashSet<>();
+            logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
             Iterator<Long> runsIterator = runs.iterator();
             while (runsIterator.hasNext()) {
                 Long run = runsIterator.next();
@@ -485,108 +546,375 @@ public class RunInfoUtils {
                     RunInfo runInfo = runInfos.iterator().next();
                     if (!runInfo.getRunQuality().equalsIgnoreCase(runQuality)) {
                         logger.log(Level.WARNING, "The run quality for run " + run
-                                + "has been changed from bad to " + runInfo.getRunQuality());
-                        // todo update DB for this run
+                                + "has been changed from " + runQuality + " to " + runInfo.getRunQuality());
+                        updatedRuns.add(run);
                         runsIterator.remove();
                     }
                 }
             }
-            deleteRuns(runs);
+
+            /*if (!updatedRuns.isEmpty()) {
+                logger.log(Level.WARNING, "Runs with different info in Logbook than database: " + updatedRuns + ", nr: " + updatedRuns.size());
+                RunInfoUtils.fetchRunInfo(updatedRuns);
+            }*/
         } else {
-            logger.log(Level.WARNING, "The run quality " + runQuality + " is invalid.");
+            logger.log(Level.WARNING, "The received run quality " + runQuality + " is invalid.");
         }
     }
 
-    private static void deleteRuns(Set<Long> runs) {
-        DB db = new DB();
-        List<Long> alreadyDeleted = new ArrayList<>();
-        List<Long> containsOtherFiles = new ArrayList<>();
+    //private static final int RUN_ALREADY_DELETED = -1;
+    private static final int RUN_CONTAINS_OTHER_FILES = -1;
+    private static final int RUN_QUERY_FAILED = -2;
+    private static final int RUN_DELETION_FAILED = -3;
 
-        for (Long run : runs) {
-            String prefix = "";
+    private static String getCollectionPathQuery(Long run, boolean logbookEntry) {
+        String prefix = "";
+        if (logbookEntry) {
             Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
             if (!runInfos.isEmpty()) {
                 RunInfo runInfo = runInfos.iterator().next();
-                if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0 && runInfo.getLhcPeriod() != null) {
-                    Timestamp ts = new Timestamp(runInfo.getTimeO2Start());
-                    prefix = ts.getYear() + "/" + runInfo.getLhcPeriod() + "/" + run;
-                }
+                if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0)
+                    prefix = String.valueOf(new Date(runInfo.getTimeO2Start()).getYear() + 1900);
             }
-            String select = "select collection_path from rawdata_runs where run = " + run +
-                    " and collection_path like '%/alice/data/" + prefix + "%/collection';";
-            db.query(select);
-            while (db.moveNext()) {
-                String collection_path = db.gets("collection_path");
-                Set<LFN> lfns = new HashSet<>(LFNUtils
-                        .find(collection_path.replaceAll("collection", ""),"*", 0));
-                if (lfns.size() == 0) {
-                    alreadyDeleted.add(run);
-                    continue;
-                }
+        }
+        String select = "select collection_path from rawdata_runs where run = " + run +
+                " and collection_path like '%/alice/data/" + prefix + "%/collection';";
+        return select;
+    }
 
-                Iterator<LFN> lfnsIterator = lfns.iterator();
-                while (lfnsIterator.hasNext()) {
-                    LFN lfn = lfnsIterator.next();
-                    if (!lfn.isFile()) {
-                        lfnsIterator.remove();
-                        continue;
-                    }
-                    String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
-                    logger.log(Level.INFO, "LFN: " + lfnName);
-                    if (!lfnName.matches("^o2_ctf_.*root$") && !lfnName.matches("^o2_rawtf_.*tf$")) {
-                        containsOtherFiles.add(run);
-                        break;
-                    }
-                }
-                if (containsOtherFiles.contains(run))
-                    continue;
+    private static Map<String, Long> getCountSizeRun(Long run) {
+        DB db = new DB();
+        Map<String, Long> countSizeMap = new HashMap<>();
+        String select = "select count(1), sum(size) as size from rawdata_details where run = " + run + ";";
+        db.query(select);
+        if (!db.moveNext()) {
+            logger.log(Level.WARNING, select + " failed");
+            countSizeMap.put("count", 0L);
+            countSizeMap.put("size", 0L);
+        }
+        countSizeMap.put("count", db.getl("count"));
+        countSizeMap.put("size", db.getl("size"));
+        return countSizeMap;
+    }
 
-                select = "select count(1), sum(size) as size from rawdata_details where run = " + run + ";";
-                db.query(select);
-                if (!db.moveNext())
-                    continue;
-                long count = db.getl("count");
-                long size = db.getl("size");
+    private static Set<LFN> getLFNsFromCollection(String collectionPath) {
+        Set<LFN> lfns = new HashSet<>(LFNUtils
+                .find(collectionPath.replaceAll("collection", ""), "*", 0));
+        logger.log(Level.INFO, "Lfns list size: " + lfns.size());
+        if (lfns.size() == 0)
+            return lfns;
 
-                select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
-                db.query(select);
-                if (!db.moveNext())
-                    continue;
-                int iDaqGoodFlag = db.geti("daq_goodflag");
-                String sDaqGoodFlag = getRunQuality(iDaqGoodFlag);
-                if (sDaqGoodFlag != null) {
-                    lfnsIterator = lfns.iterator();
-                    boolean status = true;
-                    while (lfnsIterator.hasNext()) {
-                        LFN l = lfnsIterator.next();
-                        if (!l.delete(true, false)) {
-                            status = false;
-                            continue;
-                        }
-
-                        String update = "update rawdata set status='deleted'" +
-                                " where lfn = '" + l.getCanonicalName() + "';";
-                        if (!db.syncUpdateQuery(update)) {
-                            logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
-                        }
-                    }
-
-                    if (status) {
-                        String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
-                                "values (" + run + ", 'delete', 'all', " + count + ", " + size + ", 'Deletion Thread', '" +
-                                sDaqGoodFlag + " run')";
-                        if (!db.syncUpdateQuery(insert)) {
-                            logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
-                        }
-                    }
-                }
+        Iterator<LFN> lfnsIterator = lfns.iterator();
+        while (lfnsIterator.hasNext()) {
+            LFN lfn = lfnsIterator.next();
+            if (!lfn.isFile()) {
+                logger.log(Level.WARNING, "This " + lfn.getCanonicalName() + " lfn is not a file.");
+                lfnsIterator.remove();
             }
         }
 
-        if (!alreadyDeleted.isEmpty())
-            logger.log(Level.WARNING, "Runs already deleted: " + alreadyDeleted + ", nr: " + alreadyDeleted.size());
-        if (!containsOtherFiles.isEmpty())
-            logger.log(Level.WARNING, "Runs with files other than TF and CTF: " + containsOtherFiles + ", nr: " + containsOtherFiles.size());
+        return lfns;
     }
 
+    private static int deleteRun(Long run, boolean logbookEntry) {
+        DB db = new DB();
+
+        String prefix = "";
+        if (logbookEntry) {
+            Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
+            if (!runInfos.isEmpty()) {
+                RunInfo runInfo = runInfos.iterator().next();
+                if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0)
+                    prefix = String.valueOf(new Date(runInfo.getTimeO2Start()).getYear() + 1900);
+            }
+        }
+        String select = "select collection_path from rawdata_runs where run = " + run +
+                " and collection_path like '%/alice/data/" + prefix + "%/collection';";
+        db.query(select);
+        while (db.moveNext()) {
+            String collection_path = db.gets("collection_path");
+            if (collection_path.isEmpty() || collection_path.isBlank())
+                continue;
+            logger.log(Level.INFO, collection_path);
+            Set<LFN> lfns = new HashSet<>(LFNUtils
+                    .find(collection_path.replaceAll("collection", ""), "*", 0));
+            logger.log(Level.INFO, "Lfns list size: " + lfns.size());
+            if (lfns.size() == 0) {
+                logger.log(Level.INFO, "The " + run + " run with collection path " + collection_path + " was deleted");
+                continue;
+            }
+
+            Iterator<LFN> lfnsIterator = lfns.iterator();
+            while (lfnsIterator.hasNext()) {
+                LFN lfn = lfnsIterator.next();
+                if (!lfn.isFile()) {
+                    logger.log(Level.WARNING, "This " + lfn.getCanonicalName() + " lfn is not a file.");
+                    lfnsIterator.remove();
+                    continue;
+                }
+                String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
+                if (!lfnName.endsWith(".root") && !lfnName.endsWith(".tf")) {
+                    logger.log(Level.WARNING, lfn.getCanonicalName() + " has incorrect extension");
+                    return RUN_CONTAINS_OTHER_FILES;
+                }
+            }
+
+            select = "select count(1), sum(size) as size from rawdata_details where run = " + run + ";";
+            db.query(select);
+            if (!db.moveNext()) {
+                logger.log(Level.WARNING, select + " failed");
+                return RUN_QUERY_FAILED;
+            }
+            long count = db.getl("count");
+            long size = db.getl("size");
+            lfnsIterator = lfns.iterator();
+            boolean status = true;
+            while (lfnsIterator.hasNext()) {
+                LFN l = lfnsIterator.next();
+                /*if (!l.delete(true, false)) {
+                    status = false;
+                    logger.log(Level.WARNING, "The deletion of the " + l.getName() + " failed");
+                    continue;
+                }*/
+
+                String update = "update rawdata set status='deleted'" +
+                        " where lfn = '" + l.getCanonicalName() + "';";
+                /*if (!db.syncUpdateQuery(update)) {
+                    logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
+                }*/
+            }
+
+            select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
+            db.query(select);
+            int iDaqGoodFlag = db.geti("daq_goodflag", -1);
+            String sDaqGoodFlag = getRunQuality(iDaqGoodFlag);
+            if (sDaqGoodFlag == null)
+                sDaqGoodFlag = "no logbook entry for this";
+
+            if (status) {
+                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
+                        "values (" + run + ", 'delete', 'all', " + count + ", " + size + ", 'Deletion Thread', '" +
+                        sDaqGoodFlag + " run')";
+                logger.log(Level.INFO, insert);
+                /*if (!db.syncUpdateQuery(insert)) {
+                    logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
+                } else {
+                    RunActionUtils.retrofitRawdataRunsLastAction(run);
+                }*/
+            } else {
+                logger.log(Level.WARNING, "The deletion of the " + run + " run failed.");
+                return RUN_DELETION_FAILED;
+            }
+        }
+        return 0;
+    }
+
+
+    private static void deleteCheckStatus(Set<Long> runs, boolean logbookEntry) {
+        List<Long> containsOtherFiles = new ArrayList<>();
+        List<Long> queryFailed = new ArrayList<>();
+        List<Long> deletionFailed = new ArrayList<>();
+
+        logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
+        for (Long run : runs) {
+            int status = deleteRun(run, logbookEntry);
+            if (status == RUN_CONTAINS_OTHER_FILES)
+                containsOtherFiles.add(run);
+            else if (status == RUN_QUERY_FAILED)
+                queryFailed.add(run);
+            else if (status == RUN_DELETION_FAILED)
+                deletionFailed.add(run);
+            else
+                logger.log(Level.INFO, "Successful deletion of the " + run + " run");
+        }
+
+        if (!containsOtherFiles.isEmpty())
+            logger.log(Level.WARNING, "Runs with files other than TF and CTF: " + containsOtherFiles + ", nr: " + containsOtherFiles.size());
+        if (!queryFailed.isEmpty())
+            logger.log(Level.WARNING, "Runs with failed query: " + queryFailed + ", nr: " + queryFailed.size());
+        if (!deletionFailed.isEmpty())
+            logger.log(Level.WARNING, "Runs with failed deletion: " + deletionFailed + ", nr: " + deletionFailed.size());
+    }
+
+    public static void deleteRunsNoLogbookEntry(Set<Long> runs) {
+        deleteCheckStatus(runs, false);
+    }
+
+    public static void deleteRunsWithLogbookEntry(Set<Long> runs) {
+        deleteCheckStatus(runs, true);
+    }
+
+
+    private static final SE ctaSE = SEUtils.getSE("ALICE::CERN::CTA");
+    private static final SE eosSE = SEUtils.getSE("ALICE::CERN::EOS");
+    private static final SE eosaliceo2SE = SEUtils.getSE("ALICE::CERN::EOSALICEO2");
+    private static final SE kistiSE = SEUtils.getSE("ALICE::KISTI_GSDC::CDS");
+    private static final SE ralSE = SEUtils.getSE("ALICE::RAL::CTA");
+    private static final SE ndgfSE = SEUtils.getSE("ALICE::NDGF::DCACHE_TAPE");
+    private static final SE fzkSE = SEUtils.getSE("ALICE::FZK::TAPE");
+    private static final SE cnafSE = SEUtils.getSE("ALICE::CNAF::TAPE");
+    private static final SE ccin2p3SE = SEUtils.getSE("ALICE::CCIN2P3::TAPE ");
+    private static final SE ornlSE = SEUtils.getSE("ALICE::ORNL::PRF_EOS");
+
+    private static void deleteReplica(Long run, String collectionPath, String lfnPattern) {
+        Collection<LFN> lfns = LFNUtils.find(collectionPath, lfnPattern, 0);
+        Collection<UUID> uuids = new ArrayList<>(lfns.size());
+
+        for (LFN l : lfns)
+            uuids.add(l.guid);
+
+        //logger.log(Level.INFO, "Requesting GUIDs for " + uuids.size() + " objects");
+
+        Set<GUID> guids = GUIDUtils.getGUIDs(uuids.toArray(new UUID[0]));
+        int eosaliceo2Counter = 0;
+        int eosCounter = 0;
+        int ctaCounter = 0;
+        int kistiCounter = 0;
+        int ralCounter = 0;
+        int ndgfCounter = 0;
+        int fzkCounter = 0;
+        int cnafCounter = 0;
+        int ccin2p3Counter = 0;
+        int ornlCounter = 0;
+        /*int notOnCTA = 0;
+        int notOnEOS = 0;*/
+
+        for (GUID g : guids) {
+            if (g.hasReplica(eosaliceo2SE)) {
+                //g.removePFN(eosaliceo2SE, true);
+                eosaliceo2Counter += 1;
+            }
+
+            /*if (g.hasReplica(ctaSE))
+                ctaCounter += 1;
+
+            if (g.hasReplica(eosSE))
+                eosCounter += 1;
+
+            if (g.hasReplica(kistiSE))
+                kistiCounter += 1;
+
+            if (g.hasReplica(ralSE))
+                ralCounter += 1;
+
+            if (g.hasReplica(ndgfSE))
+                ndgfCounter += 1;
+
+            if (g.hasReplica(fzkSE))
+                fzkCounter += 1;
+
+            if (g.hasReplica(cnafSE))
+                cnafCounter += 1;
+
+            if (g.hasReplica(ccin2p3SE))
+                ccin2p3Counter += 1;
+
+            if (g.hasReplica(ornlSE))
+                ornlCounter += 1;*/
+
+            /*if (g.hasReplica(ctaSE) && g.hasReplica(eosSE)) {
+                g.removePFN(eosSE, true);
+                allGood++;
+            }
+            else if (!g.hasReplica(ctaSE))
+                notOnCTA++;
+            else
+                notOnEOS++;*/
+        }
+
+        logger.log(Level.INFO, "Run: " + run + " total files: " + guids.size() + ", EOSALICEO2: " + eosaliceo2Counter + ", CTA: " + ctaCounter
+                + ", EOS: " + eosCounter + ", KISTI: " + kistiCounter + ", RAL: " + ralCounter + ", NDGF: " + ndgfCounter
+                + ", FZK: " + fzkCounter + ", CNAF: " + cnafCounter + ", CCIN2P3: " + ccin2p3Counter + ", ORNL: " + ornlCounter);
+
+        /*DB db = new DB();
+        db.query("insert into rawdata_runs_action (run, action, filter, counter, log_message, source, sourcese) values (" + run
+            + ", 'delete replica', 'tf', " + eosaliceo2Counter + ", 'Latchezar mail @ 2023-05-11 13:47', 'Alice.java', 'ALICE::CERN::EOSALICEO2');");
+        RunActionUtils.retrofitRawdataRunsLastAction(run);*/
+    }
+
+    public static void deleteReplicaRuns(Set<Long> runs) {
+        for (Long run : runs)
+            deleteReplica(run, "/alice/data/2023/LHC23l/" + run, "/raw/*.root");
+    }
+
+    public static void deleteReplicaRuns(Long run, String collectionPath, String lfnPattern) {
+        deleteReplica(run, collectionPath, lfnPattern);
+    }
+
+    private static Set<LFN> moveRun(Long run, boolean logbookEntry) {
+        DB db = new DB();
+        String select = getCollectionPathQuery(run, logbookEntry);
+        Set<LFN> lfnsToTransfer = new HashSet<>();
+        db.query(select);
+        while (db.moveNext()) {
+            String collectionPath = db.gets("collection_path");
+            if (collectionPath.isEmpty() || collectionPath.isBlank())
+                continue;
+            logger.log(Level.INFO, collectionPath);
+            Set<LFN> lfns = getLFNsFromCollection(collectionPath);
+            if (lfns.size() == 0) {
+                logger.log(Level.WARNING, "The " + run + " run with collection path " + collectionPath + " was deleted");
+                continue;
+            }
+            lfnsToTransfer.addAll(lfns);
+        }
+        return lfnsToTransfer;
+    }
+
+    public static void moveRuns(Set<Long> runs, String targetSE, String sourceSE, boolean logbookEntry, String logMessage) {
+        int transferId = TransferManager.getTransferId(SEUtils.getSE(targetSE), logMessage, sourceSE);
+        DB db = new DB();
+
+        for (Long run : runs) {
+            Set<LFN> lfns = moveRun(run, logbookEntry);
+            boolean ok = true;
+            for (LFN lfn : lfns) {
+                String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
+                if (!lfnName.endsWith(".root") && !lfnName.endsWith(".tf")) {
+                    logger.log(Level.WARNING, lfn.getCanonicalName() + " has incorrect extension");
+                    ok = false;
+                    break;
+                }
+            }
+
+            if (!ok) {
+                continue;
+            }
+
+            Map<String, Long> countSizePair = getCountSizeRun(run);
+            long count = countSizePair.get("count");
+            long size = countSizePair.get("size");
+            if (count <= 0 || size <= 0) {
+                logger.log(Level.WARNING, "The " + run + " run was deleted");
+                continue;
+            }
+
+            if (count != lfns.size()) {
+                logger.log(Level.WARNING, "The number of LFNs from rawdata_runs (" + count
+                        + ") is different than the one in the LFNs list (" + lfns.size() + ")");
+                continue;
+            }
+
+            Map<String, Object> values = new HashMap<>();
+            values.put("run", run);
+            values.put("action", "move");
+            values.put("filter", "all");
+            values.put("counter", count);
+            values.put("size", size);
+            values.put("source", "Move Thread");
+            values.put("log_message", "move to " + targetSE);
+            values.put("targetse", targetSE);
+            if (sourceSE != null)
+                values.put("sourcese", sourceSE);
+            String insert = DBFunctions.composeInsert("rawdata_runs_action", values);
+            logger.log(Level.INFO, insert);
+            /*if (!db.query(insert)) {
+                logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
+            } else {
+                RunActionUtils.retrofitRawdataRunsLastAction(run);
+                TransferManager.addToTransfer(transferId, lfns);
+                logger.log(Level.INFO, "The " + run + " run was successfully moved to " + targetSE);
+            }*/
+        }
+    }
 }
