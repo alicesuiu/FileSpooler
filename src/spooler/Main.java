@@ -113,7 +113,8 @@ public class Main {
 		logger.log(Level.INFO, "Fallback Storage Element Name: " + spoolerProperties.gets("fallbackSEName", fallbackSEName));
 		logger.log(Level.INFO, "Fallback Storage Element seioDaemons: " + spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 
-		logger.log(Level.INFO, "Storage threshold: " + spoolerProperties.geti("storageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "First Storage threshold: " + spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "Second Storage threshold: " + spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold));
 
 		ConfigUtils.setApplicationName("epn2eos");
 
