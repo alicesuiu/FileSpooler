@@ -61,7 +61,7 @@ public class Main {
 	private static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
 	private static final String fallbackSEName = "ALICE::CERN::EOSP2";
 	private static final String fallbackseioDaemons = "root://eosp2.cern.ch:1094";
-	private static final int defaultStorageThreshold = 25;
+	private static final int defaultStorageThreshold = 1024;
 	static final boolean defaultMd5Enable = false;
 	static final int defaultMaxBackoff = 10;
 	static final int defaultTransferThreads = 4;
@@ -146,7 +146,7 @@ public class Main {
 			values.add(Integer.valueOf(registrationWatcher.executors.values().stream().mapToInt((s) -> s.getPoolSize()).sum()));
 
 			names.add("transfer_queued_files_size");
-			values.add(Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum()));
+			values.add(getTransferQueueSize());
 
 			final File directory = new File(spoolerProperties.gets("errorDir", defaultErrorDir));
 
@@ -390,12 +390,16 @@ public class Main {
 		}
 	}
 
-	static Pair<String, String> getActiveStorage() {
-		long currentTransferQueuesSize = Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum());
-		long currentThreshold = spoolerProperties.geti("storageThreshold", defaultStorageThreshold);
-		currentThreshold *= 1024 * 1024 * 1024;
+	private static long getTransferQueueSize() {
+		return Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum());
+	}
 
-		if (currentTransferQueuesSize > currentThreshold) {
+	static Pair<String, String> getActiveStorage() {
+		long currentTransferQueuesSize = getTransferQueueSize();
+		long secondStorageThreshold = spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold);
+
+		secondStorageThreshold *= 1024 * 1024 * 1024;
+		if (currentTransferQueuesSize > secondStorageThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
@@ -405,8 +409,17 @@ public class Main {
 
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
+		long currentTransferQueuesSize = getTransferQueueSize();
+		long firstStorageThreshold = spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold);
+		firstStorageThreshold *= 1024 * 1024 * 1024;
+
+		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
+			currentTransferQueuesSize > firstStorageThreshold)
+			return new Pair<>(1, "Warning! The " + seName + " storage has reached 25% of its capacity!");
+
 		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
 			return new Pair<>(1, "Writing to fallback storage " + seName);
+
 		return new Pair<>(0, null);
 	}
 }
