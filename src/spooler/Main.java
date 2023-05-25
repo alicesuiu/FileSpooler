@@ -19,7 +19,6 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
-import alien.site.supercomputing.titan.Pair;
 import apmon.ApMon;
 import apmon.ApMonException;
 import lazyj.ExtProperties;

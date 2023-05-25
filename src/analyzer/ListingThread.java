@@ -3,7 +3,7 @@ package analyzer;
 import alien.config.ConfigUtils;
 import alien.io.xrootd.XrootdFile;
 import alien.io.xrootd.XrootdListing;
-import alien.site.supercomputing.titan.Pair;
+import spooler.Pair;
 
 import java.io.FileWriter;
 import java.io.IOException;

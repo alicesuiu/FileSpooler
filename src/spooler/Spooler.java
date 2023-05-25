@@ -14,7 +14,6 @@ import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.monitoring.Timing;
 import alien.se.SE;
-import alien.site.supercomputing.titan.Pair;
 import lazyj.Format;
 
 /**
