@@ -302,7 +302,8 @@ class FileWatcher implements Runnable {
 			else
 				guid = UUID.fromString(uuid);
 
-			/* the detector list contains a single detector
+			/*
+			 * the detector list contains a single detector
 			 * example:
 			 * det_composition: TPC
 			 * LHCPeriod: OCT
@@ -341,7 +342,7 @@ class FileWatcher implements Runnable {
 				+ "surl: " + surl + ", size: " + size + ", curl: " + curl
 				+ ", priority: " + priority + ", type: " + type + ", guid: " + guid
 				+ ", LHCPeriod: " + LHCPeriod + ", run: " + run + ", ctime: " + ctime
-				+ ", metadataFile: " + file.getAbsolutePath());
+				+ ", metadataFile: " + file.getAbsolutePath() + ", md5: " + md5);
 
 		return new FileElement(md5, surl, size, run, guid, ctime, LHCPeriod,
 				file.getAbsolutePath(), xxhash, lurl, type, curl, seName, seioDaemons,
