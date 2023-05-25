@@ -229,12 +229,18 @@ class Spooler extends FileOperator {
 				transfer_time = t.getSeconds();
 			}
 
-			onSuccess(element, transfer_time, storage);
+			try {
+				onSuccess(element, transfer_time, storage);
+			}
+			catch (IOException ioe) {
+				logger.log(Level.SEVERE, "Fatal error managing metadata for the following path: " + element.getSurl()
+						+ "\nEPN2EOS cannot continue running due to a corrupted state. Please fix the disk space situation and only then restart the tool. Bye bye.", ioe);
+				System.exit(1);
+			}
 			return true;
 		}
 		catch (IOException e) {
-			logger.log(Level.WARNING, "Transfer failed with exception for file: " + element.getSurl()
-					+ "\n" + e.getMessage());
+			logger.log(Level.WARNING, "Transfer failed with exception for file: " + element.getSurl(), e);
 			onFail(element);
 		}
 
