@@ -19,6 +19,7 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
+import alien.site.JobAgent;
 import alien.site.supercomputing.titan.Pair;
 import apmon.ApMon;
 import apmon.ApMonException;
@@ -396,11 +397,11 @@ public class Main {
 	}
 
 	static Pair<String, String> getActiveStorage() {
-		long currentTransferQueuesSize = getTransferQueueSize();
+		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
 		long secondStorageThreshold = spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold);
 
 		secondStorageThreshold *= 1024 * 1024 * 1024;
-		if (currentTransferQueuesSize > secondStorageThreshold) {
+		if (currentDiskFreeSpace > secondStorageThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
@@ -410,16 +411,16 @@ public class Main {
 
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
-		long currentTransferQueuesSize = getTransferQueueSize();
+		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
 		long firstStorageThreshold = spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold);
 		firstStorageThreshold *= 1024 * 1024 * 1024;
 
-		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
-			currentTransferQueuesSize > firstStorageThreshold)
-			return new Pair<>(1, "Warning! The " + seName + " storage has reached 25% of its capacity!");
-
 		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
 			return new Pair<>(1, "Writing to fallback storage " + seName);
+
+		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
+				currentDiskFreeSpace > firstStorageThreshold)
+			return new Pair<>(1, "Warning! The " + seName + " storage has reached 25% of its capacity!");
 
 		return new Pair<>(0, null);
 	}
