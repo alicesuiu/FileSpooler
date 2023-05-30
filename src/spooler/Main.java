@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.Vector;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -82,23 +83,35 @@ public class Main {
 	public static void main(final String[] args) throws InterruptedException, ApMonException, IOException {
 		spoolerProperties = ConfigUtils.getConfiguration("epn2eos");
 
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
-			return;
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir)))) {
+			logger.log(Level.INFO, "Sanity Check for metadataDir "
+					+ spoolerProperties.gets("metadataDir", defaultMetadataDir) + " failed.");
+			System.exit(1);
+		}
 		logger.log(Level.INFO, "Metadata Dir Path: "
 				+ spoolerProperties.gets("metadataDir", defaultMetadataDir));
 
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
-			return;
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir)))) {
+			logger.log(Level.INFO, "Sanity Check for registrationDir "
+					+ spoolerProperties.gets("registrationDir", defaultRegistrationDir) + " failed.");
+			System.exit(2);
+		}
 		logger.log(Level.INFO, "Registration Dir Path: "
 				+ spoolerProperties.gets("registrationDir", defaultRegistrationDir));
 
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir))))
-			return;
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir)))) {
+			logger.log(Level.INFO, "Sanity Check for errorDir "
+					+ spoolerProperties.gets("errorDir", defaultErrorDir) + " failed.");
+			System.exit(3);
+		}
 		logger.log(Level.INFO, "Error Dir Path for transfer: "
 				+ spoolerProperties.gets("errorDir", defaultErrorDir));
 
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir))))
-			return;
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))) {
+			logger.log(Level.INFO, "Sanity Check for errorRegDir "
+					+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir) + " failed.");
+			System.exit(4);
+		}
 		logger.log(Level.INFO, "Error Dir Path for registration: "
 				+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir));
 
@@ -370,11 +383,14 @@ public class Main {
 		}
 
 		try {
-			final Path tmpFile = Files.createTempFile(Paths.get(directory.getAbsolutePath()), null, null);
+			Path tmpFile = Files.createTempFile(Paths.get(directory.getAbsolutePath()), null, null);
+			byte[] bytes = new byte[100];
+			new Random().nextBytes(bytes);
+			Files.write(tmpFile, bytes);
 			Files.delete(tmpFile);
 		}
 		catch (final IOException e) {
-			logger.log(Level.WARNING, "Could not create/delete file inside the "
+			logger.log(Level.WARNING, "Could not create/write/delete file inside the "
 					+ directory.getAbsolutePath() + " directory", e.getMessage());
 			return false;
 		}
