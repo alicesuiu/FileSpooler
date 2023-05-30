@@ -19,6 +19,7 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
+import alien.site.JobAgent;
 import apmon.ApMon;
 import apmon.ApMonException;
 import lazyj.ExtProperties;
@@ -60,7 +61,7 @@ public class Main {
 	private static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
 	private static final String fallbackSEName = "ALICE::CERN::EOSP2";
 	private static final String fallbackseioDaemons = "root://eosp2.cern.ch:1094";
-	private static final int defaultStorageThreshold = 25;
+	private static final int defaultStorageThreshold = 1024;
 	static final boolean defaultMd5Enable = false;
 	static final int defaultMaxBackoff = 10;
 	static final int defaultTransferThreads = 4;
@@ -112,7 +113,8 @@ public class Main {
 		logger.log(Level.INFO, "Fallback Storage Element Name: " + spoolerProperties.gets("fallbackSEName", fallbackSEName));
 		logger.log(Level.INFO, "Fallback Storage Element seioDaemons: " + spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 
-		logger.log(Level.INFO, "Storage threshold: " + spoolerProperties.geti("storageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "First Storage threshold: " + spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "Second Storage threshold: " + spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold));
 
 		ConfigUtils.setApplicationName("epn2eos");
 
@@ -390,11 +392,12 @@ public class Main {
 	}
 
 	static Pair<String, String> getActiveStorage() {
-		long currentTransferQueuesSize = Long.valueOf(transferWatcher.executors.values().stream().mapToLong(Main::totalFilesSize).sum());
-		long currentThreshold = spoolerProperties.geti("storageThreshold", defaultStorageThreshold);
-		currentThreshold *= 1024 * 1024 * 1024;
+		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
+		long secondStorageThreshold = spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold);
 
-		if (currentTransferQueuesSize > currentThreshold) {
+		secondStorageThreshold *= 1024 * 1024 * 1024;
+
+		if (currentDiskFreeSpace > secondStorageThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
@@ -404,8 +407,17 @@ public class Main {
 
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
+		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
+		long firstStorageThreshold = spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold);
+		firstStorageThreshold *= 1024 * 1024 * 1024;
+
 		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
 			return new Pair<>(1, "Writing to fallback storage " + seName);
+
+		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
+				currentDiskFreeSpace > firstStorageThreshold)
+			return new Pair<>(1, "Warning! The " + seName + " storage has reached 25% of its capacity!");
+
 		return new Pair<>(0, null);
 	}
 }
