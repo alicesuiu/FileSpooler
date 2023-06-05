@@ -91,7 +91,10 @@
 				|| curl.length() == 0 || seName.length() == 0
 				|| seioDaemons.length() == 0 || TFOrbits.length() == 0
 				|| persistent.length() == 0 || type.length() == 0) {
-			logMessage("Wrong parameters");
+			logMessage("Wrong parameters:\nsize: "+size+"\nsurl: "+surl+"\nmd5: "+md5+"\n" +
+					"period: "+period+"\ncurl: "+curl+"\nseName: "+seName+"\n" +
+					"seioDaemons: "+seioDaemons+"\nTFOrbits.length(): "+TFOrbits.length()+"\n" +
+					"persistent: "+persistent+"\ntype: "+type);
 			response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 			code = HttpServletResponse.SC_BAD_REQUEST;
 			return;
@@ -125,7 +128,8 @@
 		int idx = curl.indexOf(period);
 
 		if (idx > 0) {
-			final String sPartitionDir = curl.substring(0, idx);
+			final String sPartitionDir = curl.substring(0, idx + period.length());
+			//final String sPartitionDir = curl.substring(0, idx);
 
 			if (mkDirsHistory.get(sPartitionDir) == null) {
 				synchronized (lock) {
