@@ -285,10 +285,10 @@ public class RunInfoUtils {
         return -1;
     }
 
-    public static void fetchRunInfo(Set<Long> runs) {
+    public static void fetchRunInfo(Set<Long> runs) throws HandleException {
         List<Long> missingTimeO2End = new ArrayList<>();
-        List<Long> missingQualityFlag = new ArrayList<>();
         List<Long> missingLogbookRecord = new ArrayList<>();
+        String msg;
         for (Long run : runs) {
             Map<String, Object> fields = getRunParamsForLogBook(String.valueOf(run));
             int status = sendRunInfoToLogBook(run, fields);
@@ -301,11 +301,7 @@ public class RunInfoUtils {
                         missingLogbookRecord.add(run);
                         continue;
                     }
-
-                    if (getDaqGoodFlag(runInfo.getRunQuality()) < 0) {
-                        missingQualityFlag.add(run);
-                    }
-
+                    
                     if (runInfo.getTimeO2End() != null && runInfo.getTimeO2End() > 0) {
                         if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0)
                             runInfo.setRunDuration(runInfo.getTimeO2End() - runInfo.getTimeO2Start());
@@ -318,16 +314,18 @@ public class RunInfoUtils {
                     missingLogbookRecord.add(run);
                 }
             } else {
-                logger.log(Level.WARNING, "The PATCH request to the logbook did not work. We caught HTTP error code: " + status);
+                throw new HandleException("The PATCH request to the logbook did not work. We caught HTTP error code: " + status);
             }
         }
 
-        if (!missingTimeO2End.isEmpty())
-            logger.log(Level.WARNING, "Runs with missing timestamp information: " + missingTimeO2End + ", nr: " + missingTimeO2End.size());
-        if (!missingQualityFlag.isEmpty())
-            logger.log(Level.WARNING,"Runs with missing run quality information: " + missingQualityFlag + ", nr: " + missingQualityFlag.size());
-        if (!missingLogbookRecord.isEmpty())
-            logger.log(Level.WARNING,"Runs with missing logbook records: " + missingLogbookRecord + ", nr: " + missingLogbookRecord.size());
+        if (!missingTimeO2End.isEmpty()) {
+            msg = "Runs with missing timestamp information: " + missingTimeO2End + ", nr: " + missingTimeO2End.size();
+            throw new HandleException(msg, missingTimeO2End);
+        }
+        if (!missingLogbookRecord.isEmpty()) {
+            msg = "Runs with missing logbook records: " + missingLogbookRecord + ", nr: " + missingLogbookRecord.size();
+            throw new HandleException(msg, missingLogbookRecord);
+        }
     }
 
     private static Map<String, Object> getRunParamsForLogBook(String run) {
@@ -467,7 +465,7 @@ public class RunInfoUtils {
         return runInfoSet;
     }
 
-    public static Set<Long> getLastUpdatedRuns(long mintime, long maxtime) {
+    public static Set<Long> getLastUpdatedRuns(long mintime, long maxtime) throws HandleException {
         Set<RunInfo> runInfoSet = RunInfoUtils.getRunInfoChangesFromLogBook(mintime, maxtime);
         Set<Long> runs = new HashSet<>();
         if (runInfoSet != null) {
@@ -482,6 +480,8 @@ public class RunInfoUtils {
                         runs.add(ri.getRunNumber());
                 }
             }
+        } else {
+            throw new HandleException("Get last updated runs between: [" + mintime + ", " + maxtime + "] failed.");
         }
         return runs;
     }
