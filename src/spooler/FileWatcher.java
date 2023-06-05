@@ -72,7 +72,7 @@ class FileWatcher implements Runnable {
 						final File file = filePath.toFile();
 
 						if (file.getName().endsWith(".done")) {
-							processNewFiles.put(file);
+							processNewFiles.add(file);
 						}
 					}
 				}
