@@ -47,7 +47,7 @@ class FileWatcher implements Runnable {
 	private final File directory;
 	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
 	private final boolean isTransfer;
-	BlockingQueue<File> processNewFiles = new LinkedBlockingDeque<>();
+	BlockingQueue<File> processNewFiles = new LinkedBlockingDeque<>(16);
 	private Thread intermediateThread = null;
 	private Thread myself = null;
 
@@ -72,7 +72,7 @@ class FileWatcher implements Runnable {
 						final File file = filePath.toFile();
 
 						if (file.getName().endsWith(".done")) {
-							processNewFiles.add(file);
+							processNewFiles.put(file);
 						}
 					}
 				}
