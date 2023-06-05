@@ -72,7 +72,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.28";
+	private static final String version = "v.1.29";
 
 	/**
 	 * Entry point
@@ -207,7 +207,7 @@ public class Main {
 			names.add("write_Status");
 			values.add(storageStatus.getFirst());
 
-			if (storageStatus.getFirst() == 1) {
+			if (storageStatus.getFirst() > 0) {
 				names.add("write_Message");
 				values.add(storageStatus.getSecond());
 			}
@@ -409,11 +409,10 @@ public class Main {
 
 	static Pair<String, String> getActiveStorage() {
 		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long secondStorageThreshold = spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold);
+		long firstStorageThreshold = spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold);
+		firstStorageThreshold *= 1024 * 1024 * 1024;
 
-		secondStorageThreshold *= 1024 * 1024 * 1024;
-
-		if (currentDiskFreeSpace > secondStorageThreshold) {
+		if (currentDiskFreeSpace < firstStorageThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
@@ -424,15 +423,17 @@ public class Main {
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
 		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long firstStorageThreshold = spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold);
-		firstStorageThreshold *= 1024 * 1024 * 1024;
+		long secondStorageThreshold = spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold);
+		secondStorageThreshold *= 1024 * 1024 * 1024;
+
+		logger.log(Level.INFO, "free spcae: " + currentDiskFreeSpace + ", threshold: " + secondStorageThreshold);
 
 		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
 			return new Pair<>(1, "Writing to fallback storage " + seName);
 
 		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
-				currentDiskFreeSpace > firstStorageThreshold)
-			return new Pair<>(1, "Warning! The " + seName + " storage has reached 25% of its capacity!");
+				currentDiskFreeSpace < secondStorageThreshold)
+			return new Pair<>(2, "Warning! The " + seName + " storage has reached 25% of its capacity!");
 
 		return new Pair<>(0, null);
 	}
