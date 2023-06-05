@@ -47,7 +47,7 @@ class FileWatcher implements Runnable {
 	private final File directory;
 	Map<String, ScheduledThreadPoolExecutor> executors = new ConcurrentHashMap<>();
 	private final boolean isTransfer;
-	BlockingQueue<File> processNewFiles = new LinkedBlockingDeque<>(16);
+	BlockingQueue<File> processNewFiles = new LinkedBlockingDeque<>();
 	private Thread intermediateThread = null;
 	private Thread myself = null;
 
