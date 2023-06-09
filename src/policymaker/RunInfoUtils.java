@@ -314,7 +314,7 @@ public class RunInfoUtils {
                     missingLogbookRecord.add(run);
                 }
             } else {
-                throw new HandleException("The PATCH request to the logbook did not work. We caught HTTP error code: " + status);
+                throw new HandleException("The PATCH request to the logbook did not work. We caught a HTTP error code.", status);
             }
         }
 

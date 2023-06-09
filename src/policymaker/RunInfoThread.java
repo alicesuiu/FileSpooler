@@ -1,6 +1,8 @@
 package policymaker;
 
 import alien.config.ConfigUtils;
+import lazyj.mail.Mail;
+import lazyj.mail.Sendmail;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -71,7 +73,33 @@ public class RunInfoThread extends Thread {
                     }
                 }
             } catch (HandleException he) {
-                // todo: send mail - logbook req failed
+                try {
+                    final Mail m = new Mail();
+
+                    m.sTo = "Alice Suiu <asuiu@cern.ch>";
+                    m.sFrom = "monalisa@cern.ch";
+
+                    m.sBody = "Dear colleagues,\n\n";
+                    m.sBody += "The PATCH or GET request to the bookkeeping did not work. We got the following error message:\n";
+                    m.sBody += he.getMessage() + "\n";
+
+                    if (he.getErrorCode() != null && he.getErrorCode() > 0)
+                        m.sBody += "Also, we received the following error code: " + he.getErrorCode() + "\n";
+
+                    if (he.getList() != null)
+                        m.sBody += "Also, we received the following list of runs: " + he.getList() + "\n";
+
+                    m.sBody += "\nBest regards,\nRunInfoThread.\n";
+
+                    m.sSubject = "Warning: The PATCH/GET request to bookkeeping failed";
+
+                    final Sendmail s = new Sendmail(m.sFrom);
+                    if (!s.send(m))
+                        logger.log(Level.WARNING, "Could not send mail : " + s.sError);
+                }
+                catch (final Throwable t) {
+                    logger.log(Level.WARNING, "Cannot send mail", t);
+                }
             }
 
             synchronized (lock) {
