@@ -233,6 +233,7 @@ public class RunInfoUtils {
             }
         } catch (ParseException ex) {
             logger.log(Level.WARNING, "Caught error while parsing the JSON response " + response + " " + ex);
+            return null;
         }
 
         return runInfoSet;
