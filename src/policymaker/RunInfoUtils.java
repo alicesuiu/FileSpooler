@@ -487,16 +487,16 @@ public class RunInfoUtils {
         return runs;
     }
 
-    public static int getDaqGoodFlag(String runQuality) {
+    public static Integer getDaqGoodFlag(String runQuality) {
         if (runQuality == null)
-            return -1;
+            return null;
         if (runQuality.equalsIgnoreCase("bad"))
             return 0;
         if (runQuality.equalsIgnoreCase("good"))
             return 1;
         if (runQuality.equalsIgnoreCase("test"))
             return 2;
-        return -1;
+        return null;
     }
 
     public static String getRunQuality(int daqGoodFlag) {
@@ -527,7 +527,7 @@ public class RunInfoUtils {
     }
 
     public static void deleteRunsWithCertainRunQuality(String runQuality) {
-        int daqGoodFlag = getDaqGoodFlag(runQuality);
+        Integer daqGoodFlag = getDaqGoodFlag(runQuality);
         if (Arrays.asList(0, 1, 2).contains(daqGoodFlag)) {
             long lastmodified = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
                     .minusWeeks(4).toInstant().toEpochMilli() / 1000;
