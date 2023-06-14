@@ -76,7 +76,7 @@ class Registrator extends FileOperator {
 		try {
 			URL url = new URL(URL);
 			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-			connection.setRequestMethod("PUT");
+			connection.setRequestMethod("GET");
 			connection.setDoOutput(true);
 			connection.setConnectTimeout(1000 * 10);
 			connection.setReadTimeout(1000 * 60 * 2);

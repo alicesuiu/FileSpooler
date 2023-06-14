@@ -126,8 +126,8 @@ public class Main {
 		logger.log(Level.INFO, "Fallback Storage Element Name: " + spoolerProperties.gets("fallbackSEName", fallbackSEName));
 		logger.log(Level.INFO, "Fallback Storage Element seioDaemons: " + spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 
-		logger.log(Level.INFO, "First Storage threshold: " + spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold));
-		logger.log(Level.INFO, "Second Storage threshold: " + spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "Fallback Storage Threshold: " + spoolerProperties.geti("fallbackStorageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "Warning Storage Threshold: " + spoolerProperties.geti("warningStorageThreshold", defaultStorageThreshold));
 
 		ConfigUtils.setApplicationName("epn2eos");
 
@@ -409,10 +409,10 @@ public class Main {
 
 	static Pair<String, String> getActiveStorage() {
 		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long firstStorageThreshold = spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold);
-		firstStorageThreshold *= 1024 * 1024 * 1024;
+		long fallbackStorageThreshold = spoolerProperties.geti("fallbackStorageThreshold", defaultStorageThreshold);
+		fallbackStorageThreshold *= 1024 * 1024 * 1024;
 
-		if (currentDiskFreeSpace < firstStorageThreshold) {
+		if (currentDiskFreeSpace < fallbackStorageThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
@@ -423,17 +423,15 @@ public class Main {
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
 		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long secondStorageThreshold = spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold);
-		secondStorageThreshold *= 1024 * 1024 * 1024;
-
-		logger.log(Level.INFO, "free spcae: " + currentDiskFreeSpace + ", threshold: " + secondStorageThreshold);
+		long warningStorageThreshold = spoolerProperties.geti("warningStorageThreshold", defaultStorageThreshold);
+		warningStorageThreshold *= 1024 * 1024 * 1024;
 
 		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
 			return new Pair<>(1, "Writing to fallback storage " + seName);
 
 		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
-				currentDiskFreeSpace < secondStorageThreshold)
-			return new Pair<>(2, "Warning! The " + seName + " storage has reached 25% of its capacity!");
+				currentDiskFreeSpace < warningStorageThreshold)
+			return new Pair<>(2, "Warning! The " + seName + " storage has reached the warning storage threshold!");
 
 		return new Pair<>(0, null);
 	}
