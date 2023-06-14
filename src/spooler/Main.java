@@ -1,18 +1,18 @@
 package spooler;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-import java.util.Vector;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -20,10 +20,12 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
+import alien.site.Functions;
 import alien.site.JobAgent;
 import apmon.ApMon;
 import apmon.ApMonException;
 import lazyj.ExtProperties;
+import lia.util.process.ExternalProcesses;
 import sun.misc.Signal;
 
 /**
@@ -422,6 +424,7 @@ public class Main {
 
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
+		String diskUsage = getUsedCapacity("/data");
 		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
 		long warningStorageThreshold = spoolerProperties.geti("warningStorageThreshold", defaultStorageThreshold);
 		warningStorageThreshold *= 1024 * 1024 * 1024;
@@ -431,8 +434,50 @@ public class Main {
 
 		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
 				currentDiskFreeSpace < warningStorageThreshold)
-			return new Pair<>(2, "Warning! The " + seName + " storage has reached the warning storage threshold!");
+			return new Pair<>(2, "Warning! The " + seName + " storage has reached "
+					+ (diskUsage != null ? (diskUsage + " of its capacity!") : "the warning storage threshold!"));
 
 		return new Pair<>(0, null);
+	}
+
+	private static String getUsedCapacity(final String folder) {
+		final File folderFile = new File(Functions.resolvePathWithEnv(folder));
+
+		try {
+			if (!folderFile.exists())
+				folderFile.mkdirs();
+		}
+		catch (@SuppressWarnings("unused") Exception e) {
+			// ignore
+		}
+
+		String capacity = null;
+		try {
+			final String output = ExternalProcesses.getCmdOutput(Arrays.asList("df", "-P", "-B", "1024", folder), true, 30L, TimeUnit.SECONDS);
+
+			try (BufferedReader br = new BufferedReader(new StringReader(output))) {
+				String sLine = br.readLine();
+
+				if (sLine != null) {
+					sLine = br.readLine();
+
+					if (sLine != null) {
+						final StringTokenizer st = new StringTokenizer(sLine);
+
+						st.nextToken();
+						st.nextToken();
+						st.nextToken();
+						st.nextToken();
+
+						capacity = st.nextToken();
+					}
+				}
+			}
+		}
+		catch (IOException | InterruptedException ioe) {
+			System.out.println("Could not extract the space information from `df`: " + ioe.getMessage());
+		}
+
+		return capacity;
 	}
 }
