@@ -1,8 +1,6 @@
 package policymaker;
 
 import alien.config.ConfigUtils;
-import lazyj.mail.Mail;
-import lazyj.mail.Sendmail;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -12,6 +10,7 @@ import java.util.logging.Logger;
 
 public class RunInfoThread extends Thread {
     private final long DELTA = 300000; // 5 min in ms
+    private final long HOUR = 3600000; // 1 hour in ms
     private final long DAY = 86400000; // 24 hours in ms
     private static RunInfoThread instance = null;
     private Object lock = new Object();
@@ -37,8 +36,6 @@ public class RunInfoThread extends Thread {
             long currentTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich")).toInstant().toEpochMilli();
             long maxTime = (currentTime - DELTA) / 1000;
 
-            logger.log(Level.INFO, "mintime: " + minTime + ", maxtime: " + maxTime);
-
             String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on"
                 + " ra.run=rr.run and action='delete' where mintime >= " + minTime + " and maxtime <= " + maxTime
                 + " and daq_transfercomplete IS NULL and action IS NULL;";
@@ -62,8 +59,9 @@ public class RunInfoThread extends Thread {
                     }
                 }
 
-                if (currentTime - updatedAt >= DAY) {
-                    minTime = updatedAt;
+                if (currentTime - updatedAt >= HOUR) {
+                    minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                            .minusDays(1).toInstant().toEpochMilli();;
                     maxTime = currentTime;
                     updatedAt = currentTime;
                     Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
@@ -73,33 +71,7 @@ public class RunInfoThread extends Thread {
                     }
                 }
             } catch (HandleException he) {
-                try {
-                    final Mail m = new Mail();
-
-                    m.sTo = "Alice Suiu <asuiu@cern.ch>";
-                    m.sFrom = "monalisa@cern.ch";
-
-                    m.sBody = "Dear colleagues,\n\n";
-                    m.sBody += "The PATCH or GET request to the bookkeeping did not work. We got the following error message:\n";
-                    m.sBody += he.getMessage() + "\n";
-
-                    if (he.getErrorCode() != null && he.getErrorCode() > 0)
-                        m.sBody += "Also, we received the following error code: " + he.getErrorCode() + "\n";
-
-                    if (he.getList() != null)
-                        m.sBody += "Also, we received the following list of runs: " + he.getList() + "\n";
-
-                    m.sBody += "\nBest regards,\nRunInfoThread.\n";
-
-                    m.sSubject = "Warning: The PATCH/GET request to bookkeeping failed";
-
-                    final Sendmail s = new Sendmail(m.sFrom);
-                    if (!s.send(m))
-                        logger.log(Level.WARNING, "Could not send mail : " + s.sError);
-                }
-                catch (final Throwable t) {
-                    logger.log(Level.WARNING, "Cannot send mail", t);
-                }
+                he.sendMail();
             }
 
             synchronized (lock) {
