@@ -50,7 +50,7 @@ public class Main {
 	/**
 	 * Activity monitoring
 	 */
-	private static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
+	 static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
 
 	/**
 	 * Default Constants
@@ -88,6 +88,7 @@ public class Main {
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir)))) {
 			logger.log(Level.INFO, "Sanity Check for metadataDir "
 					+ spoolerProperties.gets("metadataDir", defaultMetadataDir) + " failed.");
+			monitor.sendParameter("disk_full_error", 1);
 			System.exit(1);
 		}
 		logger.log(Level.INFO, "Metadata Dir Path: "
@@ -96,6 +97,7 @@ public class Main {
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir)))) {
 			logger.log(Level.INFO, "Sanity Check for registrationDir "
 					+ spoolerProperties.gets("registrationDir", defaultRegistrationDir) + " failed.");
+			monitor.sendParameter("disk_full_error", 2);
 			System.exit(2);
 		}
 		logger.log(Level.INFO, "Registration Dir Path: "
@@ -104,6 +106,7 @@ public class Main {
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir)))) {
 			logger.log(Level.INFO, "Sanity Check for errorDir "
 					+ spoolerProperties.gets("errorDir", defaultErrorDir) + " failed.");
+			monitor.sendParameter("disk_full_error", 3);
 			System.exit(3);
 		}
 		logger.log(Level.INFO, "Error Dir Path for transfer: "
@@ -112,6 +115,7 @@ public class Main {
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))) {
 			logger.log(Level.INFO, "Sanity Check for errorRegDir "
 					+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir) + " failed.");
+			monitor.sendParameter("disk_full_error", 4);
 			System.exit(4);
 		}
 		logger.log(Level.INFO, "Error Dir Path for registration: "
@@ -139,6 +143,7 @@ public class Main {
 		registrationWatcher = new FileWatcher(new File(spoolerProperties.gets("registrationDir", defaultRegistrationDir)), false);
 		registrationWatcher.watch();
 
+		monitor.sendParameter("disk_full_error", 0);
 		monitor.addMonitoring("main", (names, values) -> {
 			names.add("active_transfers");
 			values.add(Integer.valueOf(nrFilesOnSend.get()));
