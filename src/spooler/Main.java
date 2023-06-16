@@ -84,12 +84,13 @@ public class Main {
 	 */
 	public static void main(final String[] args) throws InterruptedException, ApMonException, IOException {
 		spoolerProperties = ConfigUtils.getConfiguration("epn2eos");
+		int errorCode = 0;
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir)))) {
 			logger.log(Level.INFO, "Sanity Check for metadataDir "
 					+ spoolerProperties.gets("metadataDir", defaultMetadataDir) + " failed.");
 			monitor.sendParameter("disk_full_error", 1);
-			System.exit(1);
+			errorCode += 1;
 		}
 		logger.log(Level.INFO, "Metadata Dir Path: "
 				+ spoolerProperties.gets("metadataDir", defaultMetadataDir));
@@ -98,7 +99,7 @@ public class Main {
 			logger.log(Level.INFO, "Sanity Check for registrationDir "
 					+ spoolerProperties.gets("registrationDir", defaultRegistrationDir) + " failed.");
 			monitor.sendParameter("disk_full_error", 2);
-			System.exit(2);
+			errorCode += 2;
 		}
 		logger.log(Level.INFO, "Registration Dir Path: "
 				+ spoolerProperties.gets("registrationDir", defaultRegistrationDir));
@@ -106,8 +107,8 @@ public class Main {
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir)))) {
 			logger.log(Level.INFO, "Sanity Check for errorDir "
 					+ spoolerProperties.gets("errorDir", defaultErrorDir) + " failed.");
-			monitor.sendParameter("disk_full_error", 3);
-			System.exit(3);
+			monitor.sendParameter("disk_full_error", 4);
+			errorCode += 4;
 		}
 		logger.log(Level.INFO, "Error Dir Path for transfer: "
 				+ spoolerProperties.gets("errorDir", defaultErrorDir));
@@ -115,9 +116,14 @@ public class Main {
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))) {
 			logger.log(Level.INFO, "Sanity Check for errorRegDir "
 					+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir) + " failed.");
-			monitor.sendParameter("disk_full_error", 4);
-			System.exit(4);
+			monitor.sendParameter("disk_full_error", 8);
+			errorCode += 8;
 		}
+
+		if (errorCode > 0) {
+			System.exit(errorCode);
+		}
+
 		logger.log(Level.INFO, "Error Dir Path for registration: "
 				+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir));
 
