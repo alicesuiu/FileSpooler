@@ -21,7 +21,6 @@ import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
 import alien.site.Functions;
-import alien.site.JobAgent;
 import apmon.ApMon;
 import apmon.ApMonException;
 import lazyj.ExtProperties;
@@ -64,7 +63,7 @@ public class Main {
 	private static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
 	private static final String fallbackSEName = "ALICE::CERN::EOSP2";
 	private static final String fallbackseioDaemons = "root://eosp2.cern.ch:1094";
-	private static final int defaultStorageThreshold = 1024;
+	private static final String defaultStorageThreshold = "50%";
 	static final boolean defaultMd5Enable = false;
 	static final int defaultMaxBackoff = 10;
 	static final int defaultTransferThreads = 4;
@@ -87,34 +86,28 @@ public class Main {
 		int errorCode = 0;
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir)))) {
-			logger.log(Level.INFO, "Sanity Check for metadataDir "
+			logger.log(Level.WARNING, "Sanity Check for metadataDir "
 					+ spoolerProperties.gets("metadataDir", defaultMetadataDir) + " failed.");
 			monitor.sendParameter("disk_full_error", 1);
 			errorCode += 1;
 		}
-		logger.log(Level.INFO, "Metadata Dir Path: "
-				+ spoolerProperties.gets("metadataDir", defaultMetadataDir));
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir)))) {
-			logger.log(Level.INFO, "Sanity Check for registrationDir "
+			logger.log(Level.WARNING, "Sanity Check for registrationDir "
 					+ spoolerProperties.gets("registrationDir", defaultRegistrationDir) + " failed.");
 			monitor.sendParameter("disk_full_error", 2);
 			errorCode += 2;
 		}
-		logger.log(Level.INFO, "Registration Dir Path: "
-				+ spoolerProperties.gets("registrationDir", defaultRegistrationDir));
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir)))) {
-			logger.log(Level.INFO, "Sanity Check for errorDir "
+			logger.log(Level.WARNING, "Sanity Check for errorDir "
 					+ spoolerProperties.gets("errorDir", defaultErrorDir) + " failed.");
 			monitor.sendParameter("disk_full_error", 4);
 			errorCode += 4;
 		}
-		logger.log(Level.INFO, "Error Dir Path for transfer: "
-				+ spoolerProperties.gets("errorDir", defaultErrorDir));
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))) {
-			logger.log(Level.INFO, "Sanity Check for errorRegDir "
+			logger.log(Level.WARNING, "Sanity Check for errorRegDir "
 					+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir) + " failed.");
 			monitor.sendParameter("disk_full_error", 8);
 			errorCode += 8;
@@ -124,6 +117,12 @@ public class Main {
 			System.exit(errorCode);
 		}
 
+		logger.log(Level.INFO, "Metadata Dir Path: "
+				+ spoolerProperties.gets("metadataDir", defaultMetadataDir));
+		logger.log(Level.INFO, "Registration Dir Path: "
+				+ spoolerProperties.gets("registrationDir", defaultRegistrationDir));
+		logger.log(Level.INFO, "Error Dir Path for transfer: "
+				+ spoolerProperties.gets("errorDir", defaultErrorDir));
 		logger.log(Level.INFO, "Error Dir Path for registration: "
 				+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir));
 
@@ -138,8 +137,8 @@ public class Main {
 		logger.log(Level.INFO, "Fallback Storage Element Name: " + spoolerProperties.gets("fallbackSEName", fallbackSEName));
 		logger.log(Level.INFO, "Fallback Storage Element seioDaemons: " + spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 
-		logger.log(Level.INFO, "Fallback Storage Threshold: " + spoolerProperties.geti("fallbackStorageThreshold", defaultStorageThreshold));
-		logger.log(Level.INFO, "Warning Storage Threshold: " + spoolerProperties.geti("warningStorageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "Fallback Storage Threshold: " + spoolerProperties.gets("fallbackStorageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "Warning Storage Threshold: " + spoolerProperties.gets("warningStorageThreshold", defaultStorageThreshold));
 
 		ConfigUtils.setApplicationName("epn2eos");
 
@@ -421,11 +420,12 @@ public class Main {
 	}
 
 	static Pair<String, String> getActiveStorage() {
-		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long fallbackStorageThreshold = spoolerProperties.geti("fallbackStorageThreshold", defaultStorageThreshold);
-		fallbackStorageThreshold *= 1024 * 1024 * 1024;
+		String sCurrentDiskUsage = getUsedCapacity("/data");
+		String sFallbackStorageThreshold = spoolerProperties.gets("fallbackStorageThreshold", defaultStorageThreshold);
+		int iCurrentDiskUsage = Integer.parseInt(sCurrentDiskUsage.substring(0, sCurrentDiskUsage.length() - 1));
+		int iFallbackStorageThreshold = Integer.parseInt(sFallbackStorageThreshold.substring(0, sFallbackStorageThreshold.length() - 1));
 
-		if (currentDiskFreeSpace < fallbackStorageThreshold) {
+		if (iCurrentDiskUsage >= iFallbackStorageThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
@@ -435,18 +435,18 @@ public class Main {
 
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
-		String diskUsage = getUsedCapacity("/data");
-		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long warningStorageThreshold = spoolerProperties.geti("warningStorageThreshold", defaultStorageThreshold);
-		warningStorageThreshold *= 1024 * 1024 * 1024;
+		String sCurrentDiskUsage = getUsedCapacity("/data");
+		String sWarningStorageThreshold = spoolerProperties.gets("warningStorageThreshold", defaultStorageThreshold);
+		int iCurrentDiskUsage = Integer.parseInt(sCurrentDiskUsage.substring(0, sCurrentDiskUsage.length() - 1));
+		int iWarningStorageThreshold = Integer.parseInt(sWarningStorageThreshold.substring(0, sWarningStorageThreshold.length() - 1));
 
 		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
 			return new Pair<>(1, "Writing to fallback storage " + seName);
 
 		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
-				currentDiskFreeSpace < warningStorageThreshold)
-			return new Pair<>(2, "Warning! The " + seName + " storage has reached "
-					+ (diskUsage != null ? (diskUsage + " of its capacity!") : "the warning storage threshold!"));
+				iCurrentDiskUsage >= iWarningStorageThreshold)
+			return new Pair<>(2, "Warning! The disk space has reached " + sCurrentDiskUsage +
+					" of its capacity!");
 
 		return new Pair<>(0, null);
 	}
