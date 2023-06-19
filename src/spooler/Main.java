@@ -88,31 +88,28 @@ public class Main {
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir)))) {
 			logger.log(Level.WARNING, "Sanity Check for metadataDir "
 					+ spoolerProperties.gets("metadataDir", defaultMetadataDir) + " failed.");
-			monitor.sendParameter("disk_full_error", 1);
 			errorCode += 1;
 		}
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir)))) {
 			logger.log(Level.WARNING, "Sanity Check for registrationDir "
 					+ spoolerProperties.gets("registrationDir", defaultRegistrationDir) + " failed.");
-			monitor.sendParameter("disk_full_error", 2);
 			errorCode += 2;
 		}
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir)))) {
 			logger.log(Level.WARNING, "Sanity Check for errorDir "
 					+ spoolerProperties.gets("errorDir", defaultErrorDir) + " failed.");
-			monitor.sendParameter("disk_full_error", 4);
 			errorCode += 4;
 		}
 
 		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))) {
 			logger.log(Level.WARNING, "Sanity Check for errorRegDir "
 					+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir) + " failed.");
-			monitor.sendParameter("disk_full_error", 8);
 			errorCode += 8;
 		}
 
+		monitor.sendParameter("disk_full_error", errorCode);
 		if (errorCode > 0) {
 			System.exit(errorCode);
 		}
@@ -148,7 +145,6 @@ public class Main {
 		registrationWatcher = new FileWatcher(new File(spoolerProperties.gets("registrationDir", defaultRegistrationDir)), false);
 		registrationWatcher.watch();
 
-		monitor.sendParameter("disk_full_error", 0);
 		monitor.addMonitoring("main", (names, values) -> {
 			names.add("active_transfers");
 			values.add(Integer.valueOf(nrFilesOnSend.get()));
@@ -222,6 +218,14 @@ public class Main {
 			if (storageStatus.getFirst() > 0) {
 				names.add("write_Message");
 				values.add(storageStatus.getSecond());
+			}
+
+			if (storageStatus.getFirst() == 1) {
+				names.add("target_Status");
+				values.add(1);
+			} else {
+				names.add("target_Status");
+				values.add(0);
 			}
 		});
 
