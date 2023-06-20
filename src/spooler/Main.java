@@ -44,6 +44,10 @@ public class Main {
 
 	static ExtProperties spoolerProperties;
 
+	static {
+		ConfigUtils.setApplicationName("epn2eos");
+	}
+
 	private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
 
 	/**
@@ -136,8 +140,6 @@ public class Main {
 
 		logger.log(Level.INFO, "Fallback Storage Threshold: " + spoolerProperties.gets("fallbackStorageThreshold", defaultStorageThreshold));
 		logger.log(Level.INFO, "Warning Storage Threshold: " + spoolerProperties.gets("warningStorageThreshold", defaultStorageThreshold));
-
-		ConfigUtils.setApplicationName("epn2eos");
 
 		transferWatcher = new FileWatcher(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir)), true);
 		transferWatcher.watch();
