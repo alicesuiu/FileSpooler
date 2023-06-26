@@ -295,8 +295,6 @@ public class RunInfo {
             }
             select = "select partition from rawdata_runs where run = " + runNumber;
             db.query(select);
-            if (!Arrays.asList(0, 1, 2).contains(daqGoodFlag) && runQuality.equalsIgnoreCase("none"))
-                daqGoodFlag = null;
             while (db.moveNext()) {
                 String partition = db.gets(1);
                 values.clear();

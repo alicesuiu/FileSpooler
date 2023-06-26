@@ -4,9 +4,6 @@ import alien.config.ConfigUtils;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -30,37 +27,6 @@ public class DeletionThread extends Thread {
         return instance;
     }
 
-    private void deleteRunsWithCertainRunQuality(Set<Long> runs, String runQuality) throws HandleException {
-        int daqGoodFlag = RunInfoUtils.getDaqGoodFlag(runQuality);
-        if (Arrays.asList(0, 1, 2).contains(daqGoodFlag)) {
-            Set<Long> updatedRuns = new HashSet<>();
-            logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
-            Iterator<Long> runsIterator = runs.iterator();
-            while (runsIterator.hasNext()) {
-                Long run = runsIterator.next();
-                Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
-                if (!runInfos.isEmpty()) {
-                    RunInfo runInfo = runInfos.iterator().next();
-                    if (!runInfo.getRunQuality().equalsIgnoreCase(runQuality)) {
-                        logger.log(Level.WARNING, "The run quality for run " + run
-                                + "has been changed from " + runQuality + " to " + runInfo.getRunQuality());
-                        updatedRuns.add(run);
-                        runsIterator.remove();
-                    }
-                }
-            }
-
-            if (!updatedRuns.isEmpty()) {
-                logger.log(Level.WARNING, "Runs with different info in Logbook than database: " + updatedRuns + ", nr: " + updatedRuns.size());
-                //RunInfoUtils.fetchRunInfo(updatedRuns);
-            }
-
-            //RunInfoUtils.deleteRunsWithLogbookEntry(runs);
-        } else {
-            logger.log(Level.WARNING, "The received run quality " + runQuality + " is invalid.");
-        }
-    }
-
     @Override
     public void run() {
         try {
@@ -75,7 +41,7 @@ public class DeletionThread extends Thread {
                         "rr.run > 500000 and daq_goodflag = 2 and action is null and lastmodified < " + lastmodified + ";";
 
                 Set<Long> runs = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
-                deleteRunsWithCertainRunQuality(runs,"Test");
+                DeletionUtils.deleteRunsWithCertainRunQuality(runs,"Test");
             }
         } catch (HandleException e) {
             e.sendMail();
