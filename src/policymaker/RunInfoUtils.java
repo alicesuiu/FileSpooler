@@ -1,9 +1,6 @@
 package policymaker;
 
-import alien.catalogue.LFN;
-import alien.catalogue.LFNUtils;
-import alien.catalogue.GUIDUtils;
-import alien.catalogue.GUID;
+import alien.catalogue.*;
 import alien.config.ConfigUtils;
 import alien.user.JAKeyStore;
 import alien.se.SE;
@@ -29,6 +26,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class RunInfoUtils {
     private static String URL_GET_RUN_INFO = "https://ali-bookkeeping.cern.ch/api/runs?filter[runNumbers]=";
@@ -609,6 +607,56 @@ public class RunInfoUtils {
         }
 
         logger.log(Level.INFO, "Lfns list size after get from storage: " + lfns.size());
+    }
+
+    public static Set<LFN> getFirstXLfns(Set<LFN> lfns, Integer limit) {
+        return lfns.stream().sorted(Comparator.comparingInt(lfn -> lfn.getCanonicalName().hashCode()))
+                .limit(limit)
+                .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    public static Map<String, Long> getReplicasForLFNs(Set<LFN> lfns) {
+        Map<String, Long> seFiles = new HashMap<>();
+
+        for (LFN l : lfns) {
+            GUID g = GUIDUtils.getGUID(l);
+            Set<PFN> pfns = g.getPFNs();
+            for (PFN pfn : pfns) {
+                String seName = pfn.getSE().seName;
+                Long cnt = seFiles.computeIfAbsent(seName, (k) -> 0L) + 1;
+                seFiles.put(seName, cnt);
+            }
+        }
+
+        return seFiles;
+    }
+
+    public static Map<String, Long> getReplicasForRun(Long run, boolean logbookEntry, String extension) {
+        DB db = new DB();
+        String select = RunInfoUtils.getCollectionPathQuery(run, logbookEntry);
+        db.query(select);
+
+        String collection_path = db.gets("collection_path");
+        if (collection_path.isEmpty() || collection_path.isBlank())
+            return null;
+
+        logger.log(Level.INFO, collection_path);
+        Set<LFN> lfns = RunInfoUtils.getLFNsFromCollection(collection_path);
+
+        if (extension != null && extension.length() > 0) {
+            RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
+        } else {
+            RunInfoUtils.getAllLFNs(lfns);
+        }
+
+        Map<String, Long> replicas = getReplicasForLFNs(lfns);
+        String replicasStr = " ";
+        for (Map.Entry<String, Long> entry : replicas.entrySet()) {
+            replicasStr += entry.getKey() + " : " + entry.getValue();
+        }
+
+        logger.log(Level.INFO, replicasStr);
+        return replicas;
     }
 
     private static void printLfns(Set<LFN> lfns, String output) {

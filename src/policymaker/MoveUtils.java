@@ -36,7 +36,8 @@ public class MoveUtils {
         return lfnsToTransfer;
     }
 
-    public static void moveRuns(Set<Long> runs, String targetSE, String sourceSE, boolean logbookEntry, String logMessage, String extension, String storage) {
+    public static void moveRuns(Set<Long> runs, String targetSE, String sourceSE, boolean logbookEntry,
+                                String logMessage, String extension, String storage, Integer limit) {
         //int transferId = TransferManager.getTransferId(SEUtils.getSE(targetSE), logMessage, sourceSE);
         DB db = new DB();
 
@@ -63,8 +64,13 @@ public class MoveUtils {
             if (extension == null && count != lfns.size()) {
                 logger.log(Level.WARNING, "The number of LFNs from rawdata_runs (" + count
                         + ") is different than the one in the LFNs list (" + lfns.size() + ")");
-                //size = lfns.stream().mapToLong(lfn -> lfn.size).sum();
                 continue;
+            }
+
+            if (limit != null && limit > 0) {
+                lfns = RunInfoUtils.getFirstXLfns(lfns, limit);
+                size = lfns.stream().mapToLong(lfn -> lfn.size).sum();
+                //logger.log(Level.INFO, "lfns: " + lfns);
             }
 
             Map<String, Object> values = new HashMap<>();

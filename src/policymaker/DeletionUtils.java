@@ -1,12 +1,10 @@
 package policymaker;
 
-import alien.catalogue.GUID;
-import alien.catalogue.GUIDUtils;
-import alien.catalogue.LFN;
-import alien.catalogue.LFNUtils;
+import alien.catalogue.*;
 import alien.config.ConfigUtils;
 import alien.se.SE;
 import alien.se.SEUtils;
+import lazyj.DBFunctions;
 import lia.Monitor.Store.Fast.DB;
 
 import java.util.*;
@@ -15,22 +13,21 @@ import java.util.logging.Logger;
 
 public class DeletionUtils {
     private static Logger logger = ConfigUtils.getLogger(DeletionUtils.class.getCanonicalName());
+    private static Map<String, List<String>> messages = new HashMap<>();
     private static final int RUN_DELETION_FAILED = -1;
-    private static final SE ctaSE = SEUtils.getSE("ALICE::CERN::CTA");
-    private static final SE eosSE = SEUtils.getSE("ALICE::CERN::EOS");
-    private static final SE eosaliceo2SE = SEUtils.getSE("ALICE::CERN::EOSALICEO2");
-    private static final SE kistiSE = SEUtils.getSE("ALICE::KISTI_GSDC::CDS");
-    private static final SE ralSE = SEUtils.getSE("ALICE::RAL::CTA");
-    private static final SE ndgfSE = SEUtils.getSE("ALICE::NDGF::DCACHE_TAPE");
-    private static final SE fzkSE = SEUtils.getSE("ALICE::FZK::TAPE");
-    private static final SE cnafSE = SEUtils.getSE("ALICE::CNAF::TAPE");
-    private static final SE ccin2p3SE = SEUtils.getSE("ALICE::CCIN2P3::TAPE ");
-    private static final SE ornlSE = SEUtils.getSE("ALICE::ORNL::PRF_EOS");
-    private static int deleteRun(Long run, boolean logbookEntry, String extension, String storage) {
+
+    public static Map<String, List<String>> getMessages() {
+        return messages;
+    }
+
+    private static int deleteRun(Long run, boolean logbookEntry, String extension, String storage, Integer limit) {
         DB db = new DB();
+        Map<String, Object> values = new HashMap<>();
         String select = RunInfoUtils.getCollectionPathQuery(run, logbookEntry);
-        String action = "delete", sourcese = "";
+        String action = "", sourcese = "";
         SE se = null;
+        List<String> infoLevel = messages.computeIfAbsent("Info", (k) -> new ArrayList<>());
+        List<String> warningLevel = messages.computeIfAbsent("Warning", (k) -> new ArrayList<>());
 
         db.query(select);
         while (db.moveNext()) {
@@ -38,6 +35,7 @@ public class DeletionUtils {
             if (collection_path.isEmpty() || collection_path.isBlank())
                 continue;
             logger.log(Level.INFO, collection_path);
+            infoLevel.add("Collection path: " + collection_path);
             Set<LFN> lfns = RunInfoUtils.getLFNsFromCollection(collection_path);
 
             if (extension != null && extension.length() > 0) {
@@ -51,92 +49,146 @@ public class DeletionUtils {
             long size = countSizePair.get("size");
             if (count <= 0 || size <= 0) {
                 logger.log(Level.WARNING, "The " + run + " run was deleted");
+                warningLevel.add("The " + run + " run was already deleted");
                 continue;
             }
 
             if (extension == null && count != lfns.size()) {
                 logger.log(Level.WARNING, "The number of LFNs from rawdata_runs (" + count
-                        + ") is different than the one in the LFNs list (" + lfns.size() + ")");
-                //size = lfns.stream().mapToLong(lfn -> lfn.size).sum();
-                continue;
+                        + ") for run " + run + " is different than the one in the LFNs list (" + lfns.size() + ")");
+                size = lfns.stream().mapToLong(lfn -> lfn.size).sum();
+                warningLevel.add("The number of LFNs from rawdata_runs (" + count
+                        + ") for run " + run + " is different than the one in the LFNs list (" + lfns.size() + ")");
+                //continue;
             }
 
             if (storage != null && storage.length() > 0) {
                 RunInfoUtils.getLfnsFromCertainStorage(lfns, storage);
-                action = "delete replica";
-                sourcese = storage;
                 se = SEUtils.getSE(storage);
             }
 
+            if (limit != null && limit > 0) {
+                lfns = RunInfoUtils.getFirstXLfns(lfns, limit);
+                size = lfns.stream().mapToLong(lfn -> lfn.size).sum();
+            }
+
             Iterator<LFN> lfnsIterator = lfns.iterator();
-            boolean status = true;
+            boolean status = true, last_replica;
+            long success_deleted = 0;
+            Map<String, Long> seFiles = new HashMap<>();
             while (lfnsIterator.hasNext()) {
                 LFN l = lfnsIterator.next();
-
+                last_replica = false;
                 if (storage != null) {
                     GUID g = GUIDUtils.getGUID(l);
-                    /*if (g.hasReplica(se)) {
+                    if (g.hasReplica(se)) {
                         if (g.removePFN(se, true) == null) {
                             status = false;
                             logger.log(Level.WARNING, "The deletion of the " + l.getName() + " failed");
-                            continue;
+                            warningLevel.add("The deletion of the " + l.getName() + " failed");
+                        } else {
+                            Set<PFN> pfns = g.getPFNs();
+                            if (pfns.size() == 0) {
+                                last_replica = true;
+                            } else {
+                                success_deleted += 1;
+                                for (PFN pfn : pfns) {
+                                    String seName = pfn.getSE().seName;
+                                    if (se != null && !seName.equalsIgnoreCase(se.seName)) {
+                                        Long cnt = seFiles.computeIfAbsent(seName, (k) -> 0L) + 1;
+                                        seFiles.put(seName, cnt);
+                                    }
+                                }
+                            }
                         }
-                    } */
-                } else {
-                    /*if (!l.delete(true, false)) {
-                        status = false;
-                        logger.log(Level.WARNING, "The deletion of the " + l.getName() + " failed");
-                        continue;
-                    }*/
+                    }
                 }
 
-                String update = "update rawdata set status='deleted'" +
-                        " where lfn = '" + l.getCanonicalName() + "';";
-                /*if (!db.syncUpdateQuery(update)) {
-                    logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
-                }*/
+                if (storage == null || last_replica) {
+                    if (!l.delete(true, false)) {
+                        status = false;
+                        logger.log(Level.WARNING, "The deletion of the " + l.getName() + " failed");
+                        warningLevel.add("The deletion of the " + l.getName() + " failed");
+                    } else {
+                        success_deleted += 1;
+                        String update = "update rawdata set status='deleted'" +
+                                " where lfn = '" + l.getCanonicalName() + "';";
+                        if (!db.syncUpdateQuery(update)) {
+                            logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
+                            warningLevel.add("Status update in rawdata failed for run: " + run + " " + db.getLastError());
+                        }
+                    }
+                }
             }
 
-            select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
-            db.query(select);
-            int iDaqGoodFlag = db.geti("daq_goodflag", -1);
-            String sDaqGoodFlag = RunInfoUtils.getRunQuality(iDaqGoodFlag);
-            if (sDaqGoodFlag == null)
-                sDaqGoodFlag = "no logbook entry for this";
-            String filter = "";
-            if (extension == null)
-                filter = "all";
-            else if (extension.equals(".tf"))
-                filter = "tf";
-            else if (extension.equals(".root"))
-                filter = "ctf";
-            else
-                filter = extension;
+            if (status && success_deleted == lfns.size()) {
+                select = "select daq_goodflag from rawdata_runs where run = " + run + ";";
+                db.query(select);
+                int iDaqGoodFlag = db.geti("daq_goodflag", -1);
+                String sDaqGoodFlag = RunInfoUtils.getRunQuality(iDaqGoodFlag);
+                if (sDaqGoodFlag == null)
+                    sDaqGoodFlag = "no logbook entry for this";
 
-            if (status) {
-                String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message, sourcese) " +
-                        "values (" + run + ", " + action + ", " + filter + ", " + count + ", " + size + ", 'Deletion Thread', '" +
-                        sDaqGoodFlag + " run', " + sourcese + ");";
+                if (extension == null)
+                    values.put("filter", "all");
+                else if (extension.equals(".tf"))
+                    values.put("filter", "tf");
+                else if (extension.equals(".root"))
+                    values.put("filter", "ctf");
+                else
+                    values.put("filter", extension);
+
+                values.put("counter", lfns.size());
+                values.put("size", size);
+
+                if (storage == null || seFiles.isEmpty())
+                    action = "delete";
+                else {
+                    action = "delete replica";
+                    sourcese = storage;
+                    values.put("sourcese", sourcese);
+                }
+                values.put("action", action);
+                values.put("run", run);
+                values.put("source", "Deletion Thread");
+                String log_message = sDaqGoodFlag + " run; deleted " + success_deleted + " files";
+                if (!seFiles.isEmpty()) {
+                    log_message += "; remaining files";
+                    for (Map.Entry<String, Long> entry : seFiles.entrySet()) {
+                        log_message += " " + entry.getKey() + " : " + entry.getValue();
+                    }
+                }
+                values.put("log_message", log_message);
+
+                String insert = DBFunctions.composeInsert("rawdata_runs_action", values);
                 logger.log(Level.INFO, insert);
-                /*if (!db.syncUpdateQuery(insert)) {
+                infoLevel.add("Update action: " + insert);
+                if (!db.query(insert)) {
                     logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
+                    warningLevel.add("Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
                 } else {
                     RunActionUtils.retrofitRawdataRunsLastAction(run);
-                }*/
+                    infoLevel.add("Successful deletion of the " + run + " run");
+                }
             } else {
                 logger.log(Level.WARNING, "The deletion of the " + run + " run failed.");
+                warningLevel.add("The deletion of the " + run + " run failed.");
+                messages.put("Info", infoLevel);
+                messages.put("Warning", warningLevel);
                 return RUN_DELETION_FAILED;
             }
         }
+        messages.put("Info", infoLevel);
+        messages.put("Warning", warningLevel);
         return 0;
     }
 
-    private static void deleteCheckStatus(Set<Long> runs, boolean logbookEntry, String extension, String storage) {
+    private static void deleteCheckStatus(Set<Long> runs, boolean logbookEntry, String extension, String storage, Integer limit) {
         List<Long> deletionFailed = new ArrayList<>();
 
         logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
         for (Long run : runs) {
-            int status = deleteRun(run, logbookEntry, extension, storage);
+            int status = deleteRun(run, logbookEntry, extension, storage, limit);
            if (status == RUN_DELETION_FAILED)
                 deletionFailed.add(run);
             else
@@ -147,95 +199,12 @@ public class DeletionUtils {
             logger.log(Level.WARNING, "Runs with failed deletion: " + deletionFailed + ", nr: " + deletionFailed.size());
     }
 
-    public static void deleteRunsNoLogbookEntry(Set<Long> runs, String extension, String storage) {
-        deleteCheckStatus(runs, false, extension, storage);
+    public static void deleteRunsNoLogbookEntry(Set<Long> runs, String extension, String storage, Integer limit) {
+        deleteCheckStatus(runs, false, extension, storage, limit);
     }
 
-    public static void deleteRunsWithLogbookEntry(Set<Long> runs, String extension, String storage) {
-        deleteCheckStatus(runs, true, extension, storage);
-    }
-
-    private static void deleteReplica(Long run, String collectionPath, String lfnPattern) {
-        DB db = new DB();
-        db.query("select partition from rawdata_runs where run = " + run + ";");
-        String partition = db.gets("partition", "");
-
-        Collection<LFN> lfns = LFNUtils.find(collectionPath + partition + "/" + run, lfnPattern, 0);
-        Collection<UUID> uuids = new ArrayList<>(lfns.size());
-
-        for (LFN l : lfns)
-            uuids.add(l.guid);
-
-        Set<GUID> guids = GUIDUtils.getGUIDs(uuids.toArray(new UUID[0]));
-        int eosaliceo2Counter = 0;
-        int eosCounter = 0;
-        int ctaCounter = 0;
-        int kistiCounter = 0;
-        int ralCounter = 0;
-        int ndgfCounter = 0;
-        int fzkCounter = 0;
-        int cnafCounter = 0;
-        int ccin2p3Counter = 0;
-        int ornlCounter = 0;
-
-        for (GUID g : guids) {
-            if (g.hasReplica(eosaliceo2SE)) {
-                //g.removePFN(eosaliceo2SE, true);
-                eosaliceo2Counter += 1;
-            }
-
-            if (g.hasReplica(ctaSE))
-                ctaCounter += 1;
-
-            if (g.hasReplica(eosSE))
-                eosCounter += 1;
-
-            if (g.hasReplica(kistiSE))
-                kistiCounter += 1;
-
-            if (g.hasReplica(ralSE))
-                ralCounter += 1;
-
-            if (g.hasReplica(ndgfSE))
-                ndgfCounter += 1;
-
-            if (g.hasReplica(fzkSE))
-                fzkCounter += 1;
-
-            if (g.hasReplica(cnafSE))
-                cnafCounter += 1;
-
-            if (g.hasReplica(ccin2p3SE))
-                ccin2p3Counter += 1;
-
-            if (g.hasReplica(ornlSE))
-                ornlCounter += 1;
-        }
-
-        if (eosaliceo2Counter > 0) {
-           /* if (ctaCounter == 0 && eosCounter == 0 && kistiCounter == 0 && ralCounter == 0 && ndgfCounter == 0 && fzkCounter == 0
-                && cnafCounter == 0 && ccin2p3Counter == 0 && ornlCounter == 0) {
-
-                counter += 1;*/
-            logger.log(Level.INFO, "Run: " + run + " total files: " + guids.size() + ", EOSALICEO2: " + eosaliceo2Counter + ", CTA: " + ctaCounter
-                    + ", EOS: " + eosCounter + ", KISTI: " + kistiCounter + ", RAL: " + ralCounter + ", NDGF: " + ndgfCounter
-                    + ", FZK: " + fzkCounter + ", CNAF: " + cnafCounter + ", CCIN2P3: " + ccin2p3Counter + ", ORNL: " + ornlCounter);
-
-            /* }*/
-
-            /*db.query("insert into rawdata_runs_action (run, action, filter, counter, log_message, source, sourcese) values (" + run
-                + ", 'delete replica', 'all', " + eosaliceo2Counter + ", 'Latchezar mail @ 2023-05-11 13:47', 'Alice.java', 'ALICE::CERN::EOSALICEO2');");
-            RunActionUtils.retrofitRawdataRunsLastAction(run);*/
-        }
-    }
-
-    public static void deleteReplicaRuns(Set<Long> runs) {
-        for (Long run : runs)
-            deleteReplica(run, "/alice/data/2022/", "/raw/*");
-    }
-
-    public static void deleteReplicaRuns(Long run, String collectionPath, String lfnPattern) {
-        deleteReplica(run, collectionPath, lfnPattern);
+    public static void deleteRunsWithLogbookEntry(Set<Long> runs, String extension, String storage, Integer limit) {
+        deleteCheckStatus(runs, true, extension, storage, limit);
     }
 
     public static void deleteRunsWithCertainRunQuality(Set<Long> runs, String runQuality) throws HandleException {

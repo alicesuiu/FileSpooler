@@ -34,14 +34,15 @@ public class DeletionThread extends Thread {
                 long lastmodified = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
                         .minusWeeks(4).toInstant().toEpochMilli() / 1000;
 
-                String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
-                        "ra.run = rr.run and action = 'delete' inner join rawdata_runs_last_action rla on " +
-                        "rla.run=rr.run and (ctf like 'ALICE::CERN::EOSALICEO2' and tf like 'ALICE::CERN::EOSALICEO2' " +
-                        "and calib like 'ALICE::CERN::EOSALICEO2' and other like 'ALICE::CERN::EOSALICEO2') where " +
+                String select = "select distinct rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on " +
+                        "ra.run = rr.run and (action = 'delete' or (action = 'delete replica' and sourcese = 'ALICE::CERN::EOSALICEO2')) where " +
                         "rr.run > 500000 and daq_goodflag = 2 and action is null and lastmodified < " + lastmodified + ";";
 
                 Set<Long> runs = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
                 DeletionUtils.deleteRunsWithCertainRunQuality(runs,"Test");
+
+                // 1 zi / sa ne uitam 1luna + 1 sapt = 5w acelasi query
+                // incearca sa stearga si trimite mail cu lista de runuri
             }
         } catch (HandleException e) {
             e.sendMail();
