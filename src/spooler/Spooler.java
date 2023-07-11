@@ -235,7 +235,8 @@ class Spooler extends FileOperator {
 			catch (IOException ioe) {
 				logger.log(Level.SEVERE, "Fatal error managing metadata for the following path: " + element.getSurl()
 						+ "\nEPN2EOS cannot continue running due to a corrupted state. Please fix the disk space situation and only then restart the tool. Bye bye.", ioe);
-				System.exit(1);
+				Main.monitor.sendParameter("disk_full_error", 16);
+				System.exit(16);
 			}
 			return true;
 		}

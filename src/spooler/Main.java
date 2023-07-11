@@ -1,17 +1,18 @@
 package spooler;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Vector;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -19,10 +20,11 @@ import java.util.logging.Logger;
 import alien.config.ConfigUtils;
 import alien.monitoring.Monitor;
 import alien.monitoring.MonitorFactory;
-import alien.site.JobAgent;
+import alien.site.Functions;
 import apmon.ApMon;
 import apmon.ApMonException;
 import lazyj.ExtProperties;
+import lia.util.process.ExternalProcesses;
 import sun.misc.Signal;
 
 /**
@@ -42,12 +44,16 @@ public class Main {
 
 	static ExtProperties spoolerProperties;
 
+	static {
+		ConfigUtils.setApplicationName("epn2eos");
+	}
+
 	private static Logger logger = ConfigUtils.getLogger(Main.class.getCanonicalName());
 
 	/**
 	 * Activity monitoring
 	 */
-	private static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
+	 static final Monitor monitor = MonitorFactory.getMonitor(Main.class.getCanonicalName());
 
 	/**
 	 * Default Constants
@@ -61,7 +67,7 @@ public class Main {
 	private static final String defaultseioDaemons = "root://eosaliceo2.cern.ch:1094";
 	private static final String fallbackSEName = "ALICE::CERN::EOSP2";
 	private static final String fallbackseioDaemons = "root://eosp2.cern.ch:1094";
-	private static final int defaultStorageThreshold = 1024;
+	private static final String defaultStorageThreshold = "50%";
 	static final boolean defaultMd5Enable = false;
 	static final int defaultMaxBackoff = 10;
 	static final int defaultTransferThreads = 4;
@@ -71,7 +77,7 @@ public class Main {
 	static FileWatcher registrationWatcher;
 	static boolean shouldRun = true;
 
-	private static final String version = "v.1.28";
+	private static final String version = "v.1.29";
 
 	/**
 	 * Entry point
@@ -81,24 +87,43 @@ public class Main {
 	 */
 	public static void main(final String[] args) throws InterruptedException, ApMonException, IOException {
 		spoolerProperties = ConfigUtils.getConfiguration("epn2eos");
+		int errorCode = 0;
 
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir))))
-			return;
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("metadataDir", defaultMetadataDir)))) {
+			logger.log(Level.WARNING, "Sanity Check for metadataDir "
+					+ spoolerProperties.gets("metadataDir", defaultMetadataDir) + " failed.");
+			errorCode += 1;
+		}
+
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir)))) {
+			logger.log(Level.WARNING, "Sanity Check for registrationDir "
+					+ spoolerProperties.gets("registrationDir", defaultRegistrationDir) + " failed.");
+			errorCode += 2;
+		}
+
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir)))) {
+			logger.log(Level.WARNING, "Sanity Check for errorDir "
+					+ spoolerProperties.gets("errorDir", defaultErrorDir) + " failed.");
+			errorCode += 4;
+		}
+
+		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir)))) {
+			logger.log(Level.WARNING, "Sanity Check for errorRegDir "
+					+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir) + " failed.");
+			errorCode += 8;
+		}
+
+		monitor.sendParameter("disk_full_error", errorCode);
+		if (errorCode > 0) {
+			System.exit(errorCode);
+		}
+
 		logger.log(Level.INFO, "Metadata Dir Path: "
 				+ spoolerProperties.gets("metadataDir", defaultMetadataDir));
-
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("registrationDir", defaultRegistrationDir))))
-			return;
 		logger.log(Level.INFO, "Registration Dir Path: "
 				+ spoolerProperties.gets("registrationDir", defaultRegistrationDir));
-
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorDir", defaultErrorDir))))
-			return;
 		logger.log(Level.INFO, "Error Dir Path for transfer: "
 				+ spoolerProperties.gets("errorDir", defaultErrorDir));
-
-		if (!sanityCheckDir(Paths.get(spoolerProperties.gets("errorRegDir", defaultErrorRegDir))))
-			return;
 		logger.log(Level.INFO, "Error Dir Path for registration: "
 				+ spoolerProperties.gets("errorRegDir", defaultErrorRegDir));
 
@@ -113,10 +138,8 @@ public class Main {
 		logger.log(Level.INFO, "Fallback Storage Element Name: " + spoolerProperties.gets("fallbackSEName", fallbackSEName));
 		logger.log(Level.INFO, "Fallback Storage Element seioDaemons: " + spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 
-		logger.log(Level.INFO, "First Storage threshold: " + spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold));
-		logger.log(Level.INFO, "Second Storage threshold: " + spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold));
-
-		ConfigUtils.setApplicationName("epn2eos");
+		logger.log(Level.INFO, "Fallback Storage Threshold: " + spoolerProperties.gets("fallbackStorageThreshold", defaultStorageThreshold));
+		logger.log(Level.INFO, "Warning Storage Threshold: " + spoolerProperties.gets("warningStorageThreshold", defaultStorageThreshold));
 
 		transferWatcher = new FileWatcher(new File(spoolerProperties.gets("metadataDir", defaultMetadataDir)), true);
 		transferWatcher.watch();
@@ -194,9 +217,17 @@ public class Main {
 			names.add("write_Status");
 			values.add(storageStatus.getFirst());
 
-			if (storageStatus.getFirst() == 1) {
+			if (storageStatus.getFirst() > 0) {
 				names.add("write_Message");
 				values.add(storageStatus.getSecond());
+			}
+
+			if (storageStatus.getFirst() == 1) {
+				names.add("target_Status");
+				values.add(1);
+			} else {
+				names.add("target_Status");
+				values.add(0);
 			}
 		});
 
@@ -370,11 +401,14 @@ public class Main {
 		}
 
 		try {
-			final Path tmpFile = Files.createTempFile(Paths.get(directory.getAbsolutePath()), null, null);
+			Path tmpFile = Files.createTempFile(Paths.get(directory.getAbsolutePath()), null, null);
+			byte[] bytes = new byte[100];
+			new Random().nextBytes(bytes);
+			Files.write(tmpFile, bytes);
 			Files.delete(tmpFile);
 		}
 		catch (final IOException e) {
-			logger.log(Level.WARNING, "Could not create/delete file inside the "
+			logger.log(Level.WARNING, "Could not create/write/delete file inside the "
 					+ directory.getAbsolutePath() + " directory", e.getMessage());
 			return false;
 		}
@@ -392,12 +426,12 @@ public class Main {
 	}
 
 	static Pair<String, String> getActiveStorage() {
-		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long secondStorageThreshold = spoolerProperties.geti("secondStorageThreshold", defaultStorageThreshold);
+		String sCurrentDiskUsage = getUsedCapacity("/data");
+		String sFallbackStorageThreshold = spoolerProperties.gets("fallbackStorageThreshold", defaultStorageThreshold);
+		int iCurrentDiskUsage = Integer.parseInt(sCurrentDiskUsage.substring(0, sCurrentDiskUsage.length() - 1));
+		int iFallbackStorageThreshold = Integer.parseInt(sFallbackStorageThreshold.substring(0, sFallbackStorageThreshold.length() - 1));
 
-		secondStorageThreshold *= 1024 * 1024 * 1024;
-
-		if (currentDiskFreeSpace > secondStorageThreshold) {
+		if (iCurrentDiskUsage >= iFallbackStorageThreshold) {
 			return new Pair<>(spoolerProperties.gets("fallbackSEName", fallbackSEName),
 					spoolerProperties.gets("fallbackseioDaemons", fallbackseioDaemons));
 		}
@@ -407,17 +441,60 @@ public class Main {
 
 	private static Pair<Integer, String> getStorageStatus() {
 		String seName = getActiveStorage().getFirst();
-		long currentDiskFreeSpace = JobAgent.getFreeSpace("/data");
-		long firstStorageThreshold = spoolerProperties.geti("firstStorageThreshold", defaultStorageThreshold);
-		firstStorageThreshold *= 1024 * 1024 * 1024;
+		String sCurrentDiskUsage = getUsedCapacity("/data");
+		String sWarningStorageThreshold = spoolerProperties.gets("warningStorageThreshold", defaultStorageThreshold);
+		int iCurrentDiskUsage = Integer.parseInt(sCurrentDiskUsage.substring(0, sCurrentDiskUsage.length() - 1));
+		int iWarningStorageThreshold = Integer.parseInt(sWarningStorageThreshold.substring(0, sWarningStorageThreshold.length() - 1));
 
 		if (seName.equals(spoolerProperties.gets("fallbackSEName", fallbackSEName)))
 			return new Pair<>(1, "Writing to fallback storage " + seName);
 
 		if (seName.equals(spoolerProperties.gets("defaultSEName", defaultSEName)) &&
-				currentDiskFreeSpace > firstStorageThreshold)
-			return new Pair<>(1, "Warning! The " + seName + " storage has reached 25% of its capacity!");
+				iCurrentDiskUsage >= iWarningStorageThreshold)
+			return new Pair<>(2, "Warning! The disk space has reached " + sCurrentDiskUsage +
+					" of its capacity!");
 
 		return new Pair<>(0, null);
+	}
+
+	private static String getUsedCapacity(final String folder) {
+		final File folderFile = new File(Functions.resolvePathWithEnv(folder));
+
+		try {
+			if (!folderFile.exists())
+				folderFile.mkdirs();
+		}
+		catch (@SuppressWarnings("unused") Exception e) {
+			// ignore
+		}
+
+		String capacity = null;
+		try {
+			final String output = ExternalProcesses.getCmdOutput(Arrays.asList("df", "-P", "-B", "1024", folder), true, 30L, TimeUnit.SECONDS);
+
+			try (BufferedReader br = new BufferedReader(new StringReader(output))) {
+				String sLine = br.readLine();
+
+				if (sLine != null) {
+					sLine = br.readLine();
+
+					if (sLine != null) {
+						final StringTokenizer st = new StringTokenizer(sLine);
+
+						st.nextToken();
+						st.nextToken();
+						st.nextToken();
+						st.nextToken();
+
+						capacity = st.nextToken();
+					}
+				}
+			}
+		}
+		catch (IOException | InterruptedException ioe) {
+			System.out.println("Could not extract the space information from `df`: " + ioe.getMessage());
+		}
+
+		return capacity;
 	}
 }
