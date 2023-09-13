@@ -6,13 +6,17 @@ public class MonitorRun {
     private long size;
     private double eta;
     private long lastSeen;
+    private int nodes;
+    private long maxTime;
 
-    public MonitorRun(long run, long cnt, long size, double eta, long lastSeen) {
+    public MonitorRun(long run, long cnt, long size, double eta, long lastSeen, int nodes, long maxTime) {
         this.run = run;
         this.cnt = cnt;
         this.size = size;
         this.eta = eta;
         this.lastSeen = lastSeen;
+        this.nodes = nodes;
+        this.maxTime = maxTime;
     }
 
     public long getRun() {
@@ -53,5 +57,17 @@ public class MonitorRun {
 
     public void setLastSeen(long lastSeen) {
         this.lastSeen = lastSeen;
+    }
+    public int getNodes() {
+        return nodes;
+    }
+    public void setNodes(int nodes) {
+        this.nodes = nodes;
+    }
+    public long getMaxTime() {
+        return maxTime;
+    }
+    public void setMaxTime(long maxTime) {
+        this.maxTime = maxTime;
     }
 }

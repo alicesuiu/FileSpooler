@@ -214,7 +214,7 @@ public class RunInfo {
         DB db = new DB();
         String query;
         Map<String, Object> values = new HashMap<>();
-        int daqGoodFlag = RunInfoUtils.getDaqGoodFlag(runQuality);
+        Integer daqGoodFlag = RunInfoUtils.getDaqGoodFlag(runQuality);
         int polarity = getPolarity();
         values.put("run", runNumber);
         values.put("fillno", fillNumber);
@@ -257,7 +257,7 @@ public class RunInfo {
             values.clear();
             values.put("run", runNumber);
             values.put("detector", detector.trim());
-            if (daqGoodFlag >= 0)
+            if (daqGoodFlag != null && Arrays.asList(0, 1, 2).contains(daqGoodFlag))
                 values.put("run_quality", daqGoodFlag);
             query = DBFunctions.composeUpsert("logbook_detectors", values, Set.of("run", "detector"));
             if (query == null)
@@ -278,7 +278,7 @@ public class RunInfo {
         if (!db.query(query))
             return;
 
-        if (daqGoodFlag >= 0) {
+        if (Arrays.asList(0, 1, 2).contains(daqGoodFlag) || runQuality.equalsIgnoreCase("none")) {
             String select = "select daq_goodflag from rawdata_runs where run = " + runNumber;
             db.query(select);
             while (db.moveNext()) {

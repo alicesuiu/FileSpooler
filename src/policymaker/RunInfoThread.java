@@ -11,6 +11,7 @@ import java.util.logging.Logger;
 public class RunInfoThread extends Thread {
     private final long DELTA = 300000; // 5 min in ms
     private final long HOUR = 3600000; // 1 hour in ms
+    private final long DAY = 86400000; // 24 hours in ms
     private static RunInfoThread instance = null;
     private Object lock = new Object();
     private static Logger logger = ConfigUtils.getLogger(RunInfoThread.class.getCanonicalName());
@@ -31,43 +32,46 @@ public class RunInfoThread extends Thread {
         long updatedAt = 0;
         while (true) {
             long minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                    .minusWeeks(5).toInstant().toEpochMilli() / 1000;
+                    .minusWeeks(1).toInstant().toEpochMilli() / 1000;
             long currentTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich")).toInstant().toEpochMilli();
             long maxTime = (currentTime - DELTA) / 1000;
-
-            logger.log(Level.INFO, "mintime: " + minTime + ", maxtime: " + maxTime);
 
             String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on"
                 + " ra.run=rr.run and action='delete' where mintime >= " + minTime + " and maxtime <= " + maxTime
                 + " and daq_transfercomplete IS NULL and action IS NULL;";
 
             Set<Long> newRuns = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
-            if (!newRuns.isEmpty()) {
-                RunInfoUtils.fetchRunInfo(newRuns);
-                logger.log(Level.INFO, "List of new runs: " + newRuns + ", nr: " + newRuns.size());
-            }
-
-            if (updatedAt == 0) {
-                minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                        .minusWeeks(5).toInstant().toEpochMilli();
-                maxTime = currentTime;
-                updatedAt = currentTime;
-                Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
-                if (!updatedRuns.isEmpty()) {
-                    RunInfoUtils.fetchRunInfo(updatedRuns);
-                    logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
+            try {
+                if (!newRuns.isEmpty()) {
+                    RunInfoUtils.fetchRunInfo(newRuns);
+                    logger.log(Level.INFO, "List of new runs: " + newRuns + ", nr: " + newRuns.size());
                 }
-            }
 
-            if (currentTime - updatedAt >= HOUR) {
-                minTime = updatedAt;
-                maxTime = currentTime;
-                updatedAt = currentTime;
-                Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
-                if (!updatedRuns.isEmpty()) {
-                    RunInfoUtils.fetchRunInfo(updatedRuns);
-                    logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
+                if (updatedAt == 0) {
+                    minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                            .minusWeeks(1).toInstant().toEpochMilli();
+                    maxTime = currentTime;
+                    updatedAt = currentTime;
+                    Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                    if (!updatedRuns.isEmpty()) {
+                        RunInfoUtils.fetchRunInfo(updatedRuns);
+                        logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
+                    }
                 }
+
+                if (currentTime - updatedAt >= HOUR) {
+                    minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                            .minusDays(1).toInstant().toEpochMilli();
+                    maxTime = currentTime;
+                    updatedAt = currentTime;
+                    Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                    if (!updatedRuns.isEmpty()) {
+                        RunInfoUtils.fetchRunInfo(updatedRuns);
+                        logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
+                    }
+                }
+            } catch (HandleException he) {
+                he.sendMail();
             }
 
             synchronized (lock) {

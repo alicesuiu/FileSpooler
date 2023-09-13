@@ -217,4 +217,29 @@ public class RunActionUtils {
         }
         db.query(query + " on conflict (run) do nothing");
     }
+
+    public static int insertRunAction(Long run, String action, String filter, String source,
+                                       String log_message, Integer counter, Long size, String sourcese,
+                                       String targetse, String status) {
+        Map<String, Object> values = new HashMap<>();
+        values.put("filter", filter);
+        values.put("counter", counter);
+        values.put("size", size);
+        values.put("action", action);
+        values.put("run", run);
+        values.put("source", source);
+        values.put("log_message", log_message);
+        values.put("sourcese", sourcese);
+        values.put("targetse", targetse);
+        values.put("status", status);
+
+        DB db = new DB();
+        String insert = DBFunctions.composeInsert("rawdata_runs_action", values);
+        logger.log(Level.INFO, insert);
+        if (!db.query(insert)) {
+            logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
+            return -1;
+        }
+        return 0;
+    }
 }
