@@ -4,11 +4,7 @@ import alien.catalogue.LFN;
 import alien.config.ConfigUtils;
 import alien.managers.TransferManager;
 import alien.se.SEUtils;
-import lazyj.DBFunctions;
-import lia.Monitor.Store.Fast.DB;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -16,42 +12,27 @@ import java.util.logging.Logger;
 
 public class MoveUtils {
     private static Logger logger = ConfigUtils.getLogger(MoveUtils.class.getCanonicalName());
-    private static Set<LFN> moveRun(Long run, boolean logbookEntry) {
-        DB db = new DB();
-        String select = RunInfoUtils.getCollectionPathQuery(run, logbookEntry);
-        Set<LFN> lfnsToTransfer = new HashSet<>();
-        db.query(select);
-        while (db.moveNext()) {
-            String collectionPath = db.gets("collection_path");
-            if (collectionPath.isEmpty() || collectionPath.isBlank())
-                continue;
-            logger.log(Level.INFO, collectionPath);
-            Set<LFN> lfns = RunInfoUtils.getLFNsFromCollection(collectionPath);
-            if (lfns.size() == 0) {
-                logger.log(Level.WARNING, "The " + run + " run with collection path " + collectionPath + " was deleted");
-                continue;
-            }
-            lfnsToTransfer.addAll(lfns);
-        }
-        return lfnsToTransfer;
-    }
 
-    public static void moveRuns(Set<Long> runs, String targetSE, String sourceSE, boolean logbookEntry,
+    public static void moveRuns(Set<Long> runs, String targetSE, String sourceSE, Boolean logbookEntry,
                                 String logMessage, String extension, String storage, Integer limit) {
-        //int transferId = TransferManager.getTransferId(SEUtils.getSE(targetSE), logMessage, sourceSE);
-        DB db = new DB();
+        int transferId = TransferManager.getTransferId(SEUtils.getSE(targetSE), logMessage, sourceSE);
+        String action, sourcese, log_message, filter;
 
         for (Long run : runs) {
-            Set<LFN> lfns = moveRun(run, logbookEntry);
-            if (extension != null && extension.length() > 0) {
-                RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
-            } else {
-                RunInfoUtils.getAllLFNs(lfns);
-            }
+            Set<LFN> lfns;
 
-            if (storage != null && storage.length() > 0) {
+            if (logbookEntry == null)
+                lfns = RunInfoUtils.getLFNsFromRawdataDetails(run);
+            else
+                lfns = RunInfoUtils.getLFNsFromCollection(run, logbookEntry);
+
+            if (extension != null && extension.length() > 0)
+                RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
+            else
+                RunInfoUtils.getAllLFNs(lfns);
+
+            if (storage != null && storage.length() > 0)
                 RunInfoUtils.getLfnsFromCertainStorage(lfns, storage);
-            }
 
             Map<String, Long> countSizePair = RunInfoUtils.getCountSizeRun(run);
             long count = countSizePair.get("count");
@@ -64,48 +45,40 @@ public class MoveUtils {
             if (extension == null && count != lfns.size()) {
                 logger.log(Level.WARNING, "The number of LFNs from rawdata_runs (" + count
                         + ") is different than the one in the LFNs list (" + lfns.size() + ")");
-                continue;
             }
 
             if (limit != null && limit > 0) {
                 lfns = RunInfoUtils.getFirstXLfns(lfns, limit);
-                size = lfns.stream().mapToLong(lfn -> lfn.size).sum();
                 //logger.log(Level.INFO, "lfns: " + lfns);
             }
 
-            Map<String, Object> values = new HashMap<>();
-            values.put("run", run);
-            values.put("counter", lfns.size());
-            values.put("size", size);
-            values.put("source", "Move Thread");
-            values.put("targetse", targetSE);
             if (sourceSE != null) {
-                values.put("sourcese", sourceSE);
-                values.put("action", "move");
-                values.put("log_message", "move to " + targetSE);
+                sourcese = sourceSE;
+                action = "move";
+                log_message = "move to " + targetSE;
             } else {
-                values.put("action", "copy");
-                values.put("sourcese", storage);
-                values.put("log_message", "copy to " + targetSE);
+                sourcese = storage;
+                action = "copy";
+                log_message =  "copy to " + targetSE;
             }
-            if (extension == null)
-                values.put("filter", "all");
-            else if (extension.equals(".tf"))
-                values.put("filter", "tf");
-            else if (extension.equals(".root"))
-                values.put("filter", "ctf");
-            else
-                values.put("filter", extension);
 
-            String insert = DBFunctions.composeInsert("rawdata_runs_action", values);
-            logger.log(Level.INFO, insert);
-            /*if (!db.query(insert)) {
-                logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
-            } else {
+            if (extension == null)
+                filter = "all";
+            else if (extension.equals(".tf"))
+                filter = "tf";
+            else if (extension.equals(".root"))
+                filter = "ctf";
+            else
+                filter = extension;
+
+            int ret = RunActionUtils.insertRunAction(run, action, filter, "Move Thread", log_message, lfns.size(),
+                    lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, targetSE, "Done");
+
+            if (ret >= 0) {
                 TransferManager.addToTransfer(transferId, lfns);
                 RunActionUtils.retrofitRawdataRunsLastAction(run);
-                logger.log(Level.INFO, "The " + run + " run was successfully moved to " + targetSE);
-            }*/
+                logger.log(Level.INFO, "The " + run + " run was successfully " + action + " to " + targetSE);
+            }
         }
     }
 }

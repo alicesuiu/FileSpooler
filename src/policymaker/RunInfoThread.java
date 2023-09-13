@@ -61,7 +61,7 @@ public class RunInfoThread extends Thread {
 
                 if (currentTime - updatedAt >= HOUR) {
                     minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                            .minusDays(1).toInstant().toEpochMilli();;
+                            .minusDays(1).toInstant().toEpochMilli();
                     maxTime = currentTime;
                     updatedAt = currentTime;
                     Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);

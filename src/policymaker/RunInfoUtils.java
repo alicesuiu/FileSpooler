@@ -1,12 +1,19 @@
 package policymaker;
 
-import alien.catalogue.*;
+import alien.catalogue.LFN;
+import alien.catalogue.PFN;
+import alien.catalogue.LFNUtils;
+import alien.catalogue.GUIDUtils;
+import alien.catalogue.GUID;
 import alien.config.ConfigUtils;
 import alien.user.JAKeyStore;
 import alien.se.SE;
 import alien.se.SEUtils;
 import lazyj.Format;
+import lazyj.mail.Mail;
+import lazyj.mail.Sendmail;
 import lia.Monitor.Store.Fast.DB;
+import lia.Monitor.monitor.AppConfig;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -540,7 +547,7 @@ public class RunInfoUtils {
         Map<String, Long> countSizeMap = new HashMap<>();
         String select = "select count(1), sum(size) as size from rawdata where " +
                 "ltrim(split_part(rawdata.lfn, '/'::text, 6), '0'::text)::integer = " + run +
-                " and status is null;";
+                " and (status is null OR status != 'deleted');";
         db.query(select);
         if (!db.moveNext()) {
             logger.log(Level.WARNING, select + " failed");
@@ -571,6 +578,41 @@ public class RunInfoUtils {
         return lfns;
     }
 
+    public static Set<LFN> getLFNsFromCollection(Long run, boolean logbookEntry) {
+        DB db = new DB();
+        String select = RunInfoUtils.getCollectionPathQuery(run, logbookEntry);
+        Set<LFN> lfnsToProcess = new HashSet<>();
+        db.query(select);
+        while (db.moveNext()) {
+            String collectionPath = db.gets("collection_path");
+            if (collectionPath.isEmpty() || collectionPath.isBlank())
+                continue;
+            logger.log(Level.INFO, collectionPath);
+            Set<LFN> lfns = RunInfoUtils.getLFNsFromCollection(collectionPath);
+            if (lfns.size() == 0) {
+                logger.log(Level.WARNING, "The " + run + " run with collection path " + collectionPath + " was deleted");
+                continue;
+            }
+            lfnsToProcess.addAll(lfns);
+        }
+        logger.log(Level.INFO, "Lfns list size after get from collection: " + lfnsToProcess.size());
+        return lfnsToProcess;
+    }
+
+    public static Set<LFN> getLFNsFromRawdataDetails(Long run) {
+        DB db = new DB();
+        String select = "select lfn from rawdata_details where run = " + run + ";";
+        Set<LFN> lfns = new HashSet<>();
+        db.query(select);
+        while (db.moveNext()) {
+            LFN lfn = LFNUtils.getLFN(db.gets("lfn"));
+            if (lfn != null && lfn.isFile())
+                lfns.add(lfn);
+        }
+        logger.log(Level.INFO, "Lfns list size after get from rawdata details: " + lfns.size());
+        return lfns;
+    }
+
     public static void getLfnsWithCertainExtension(Set<LFN> lfns, String extension) {
         Iterator<LFN> lfnsIterator = lfns.iterator();
         while (lfnsIterator.hasNext()) {
@@ -594,6 +636,7 @@ public class RunInfoUtils {
                 lfnsIterator.remove();
             }
         }
+        logger.log(Level.INFO, "Lfns list size (.root + .tf) : " + lfns.size());
     }
     public static void getLfnsFromCertainStorage(Set<LFN> lfns, String storage) {
         SE se = SEUtils.getSE(storage);
@@ -631,6 +674,16 @@ public class RunInfoUtils {
         return seFiles;
     }
 
+    public static String printReplicasForLFNs(Map<String, Long> seFiles) {
+        String msg = "";
+        for (Map.Entry<String, Long> entry : seFiles.entrySet()) {
+            String seName = entry.getKey();
+            Long nrFiles = entry.getValue();
+            msg += seName + ": " + nrFiles + " ";
+        }
+        return msg.stripTrailing();
+    }
+
     public static Map<String, Long> getReplicasForRun(Long run, boolean logbookEntry, String extension) {
         DB db = new DB();
         String select = RunInfoUtils.getCollectionPathQuery(run, logbookEntry);
@@ -650,12 +703,12 @@ public class RunInfoUtils {
         }
 
         Map<String, Long> replicas = getReplicasForLFNs(lfns);
-        String replicasStr = " ";
+        String replicasStr = "";
         for (Map.Entry<String, Long> entry : replicas.entrySet()) {
-            replicasStr += entry.getKey() + " : " + entry.getValue();
+            replicasStr += " " + entry.getKey() + " : " + entry.getValue();
         }
 
-        logger.log(Level.INFO, replicasStr);
+        logger.log(Level.INFO, extension + " " + replicasStr);
         return replicas;
     }
 
@@ -672,6 +725,24 @@ public class RunInfoUtils {
             f.close();
         } catch (IOException e) {
             //todo
+        }
+    }
+
+    public static void sendMail(String sTo, String sFrom, String sSubject, String sBody) {
+        try {
+            final Mail m = new Mail();
+
+            m.sTo = sTo;
+            m.sFrom = sFrom;
+            m.sBody = sBody;
+            m.sSubject = sSubject;
+
+            final Sendmail s = new Sendmail(m.sFrom, AppConfig.getProperty("lia.util.mail.MailServer", "127.0.0.1"));
+            if (!s.send(m))
+                logger.log(Level.WARNING, "Could not send mail : " + s.sError);
+        }
+        catch (final Throwable t) {
+            logger.log(Level.WARNING, "Cannot send mail", t);
         }
     }
 }
