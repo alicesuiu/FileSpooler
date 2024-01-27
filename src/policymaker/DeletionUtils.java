@@ -12,34 +12,7 @@ import java.util.logging.Logger;
 
 public class DeletionUtils {
     private static Logger logger = ConfigUtils.getLogger(DeletionUtils.class.getCanonicalName());
-    private static Map<Long, Pair<List<String>, List<String>>> messages = new HashMap<>();
-    private static Map<String, List<String>> globalMessages = new HashMap<>();
     private static List<Long> deletionFailed = new ArrayList<>();
-
-    public static Map<String, List<String>> getGlobalMessages() {
-        return globalMessages;
-    }
-
-    public static List<String> getGlobalInfoLevelMessages() {
-        return globalMessages.computeIfAbsent("Info", (k) -> new ArrayList<>());
-    }
-
-    public static List<String> getGlobalWarningLevelMessages() {
-        return globalMessages.computeIfAbsent("Warning", (k) -> new ArrayList<>());
-    }
-
-    public static Pair<List<String>, List<String>> getRunMessages(Long run) {
-        return messages.computeIfAbsent(run,
-                (k) -> new Pair<>(new ArrayList<>(), new ArrayList<>()));
-    }
-    public static List<String> getInfoLevelMessagesForRun(Long run) {
-        return getRunMessages(run).getFirst();
-    }
-
-    public static List<String> getWarningLevelMessagesForRun(Long run) {
-        return getRunMessages(run).getSecond();
-    }
-
     private static void filterLFNs(Set<LFN> lfns, String extension, String storage) {
         if (extension != null && !extension.isEmpty()) {
             RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
@@ -109,8 +82,6 @@ public class DeletionUtils {
         DB db = new DB();
         SE se = null;
         String action = "", sourcese = null, filter;
-        List<String> infoLevel = getInfoLevelMessagesForRun(run);
-        List<String> warningLevel = getWarningLevelMessagesForRun(run);
 
         if (storage != null && storage.length() > 0)
             se = SEUtils.getSE(storage);
@@ -128,7 +99,6 @@ public class DeletionUtils {
                     if (g.removePFN(se, true) == null) {
                         status = false;
                         logger.log(Level.WARNING, "The deletion of the " + l.getName() + " failed");
-                        warningLevel.add("The deletion of the " + l.getName() + " failed");
                     } else {
                         Set<PFN> pfns = g.getPFNs();
                         if (pfns.size() == 0) {
@@ -151,14 +121,12 @@ public class DeletionUtils {
                 if (!l.delete(true, false)) {
                     status = false;
                     logger.log(Level.WARNING, "The deletion of the " + l.getName() + " failed");
-                    warningLevel.add("The deletion of the " + l.getName() + " failed");
                 } else {
                     success_deleted += 1;
                     String update = "update rawdata set status='deleted'" +
                             " where lfn = '" + l.getCanonicalName() + "';";
                     if (!db.syncUpdateQuery(update)) {
                         logger.log(Level.WARNING, "Status update in rawdata failed for run: " + run + " " + db.getLastError());
-                        warningLevel.add("Status update in rawdata failed for run: " + run + " " + db.getLastError());
                     }
                 }
             }
@@ -203,26 +171,17 @@ public class DeletionUtils {
 
             if (ret >= 0) {
                 RunActionUtils.retrofitRawdataRunsLastAction(run);
-                infoLevel.add("Successful deletion of the " + run + " run");
                 logger.log(Level.INFO, "Successful deletion of the " + run + " run");
             }
         } else {
             logger.log(Level.WARNING, "The deletion of the " + run + " run failed.");
-            warningLevel.add("The deletion of the " + run + " run failed.");
             deletionFailed.add(run);
         }
     }
 
     public static void deleteRuns(Set<Long> runs, Boolean logbookEntry, String extension, String storage, Integer limit) {
-        messages.clear();
         deletionFailed.clear();
-        globalMessages.clear();
-
-        List<String> infoLevel = getGlobalInfoLevelMessages();
-        List<String> warningLevel = getGlobalWarningLevelMessages();
-
         logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
-        infoLevel.add("List of runs that must be deleted: " + runs + ", nr: " + runs.size());
 
         for (Long run : runs) {
             Set<LFN> lfnsToDelete = getLFNsForDeletion(run, logbookEntry, extension, storage, limit);
@@ -232,11 +191,7 @@ public class DeletionUtils {
 
         if (!deletionFailed.isEmpty()) {
             logger.log(Level.WARNING, "Runs with failed deletion: " + deletionFailed + ", nr: " + deletionFailed.size());
-            warningLevel.add("Runs with failed deletion: " + deletionFailed + ", nr: " + deletionFailed.size());
         }
-
-        globalMessages.put("Info", infoLevel);
-        globalMessages.put("Warning", warningLevel);
     }
 
     public static void deleteRunsWithCertainRunQuality(Set<Long> runs, String runQuality, String extension, String storage, Integer limit) throws HandleException {
@@ -267,56 +222,5 @@ public class DeletionUtils {
         } else {
             logger.log(Level.WARNING, "The received run quality " + runQuality + " is invalid.");
         }
-    }
-
-    public static String printMessages(Long run) {
-        String msg = "";
-        List<String> infoLevel = getInfoLevelMessagesForRun(run);
-        List<String> warningLevel = getWarningLevelMessagesForRun(run);
-        int i;
-
-        msg += "[INFO] Run " + run + ":\n";
-        for (i = 0; i < infoLevel.size(); i++)
-            msg += "[INFO] " + infoLevel.get(i) + "\n";
-
-        for (i = 0; i < warningLevel.size(); i++)
-            msg += "[WARNING] " + warningLevel.get(i) + "\n";
-
-        return msg;
-    }
-
-    public static String printMessages(Set<Long> runs, boolean printLFNs, boolean logbookEntry, boolean printReplicas, String extension, String storage, Integer limit) {
-        String msg = "", intro = "";
-        Iterator<Long> runsIterator = runs.iterator();
-        while (runsIterator.hasNext()) {
-            Long run = runsIterator.next();
-            messages.remove(run);
-            Set<LFN> lfnsToDelete = getLFNsForDeletion(run, logbookEntry, extension, storage, limit);
-            if (lfnsToDelete.size() > 0) {
-                msg += printMessages(run);
-                if (printLFNs) {
-                    msg += "[INFO] LFNs list: ";
-                    for (LFN l : lfnsToDelete)
-                        msg += l.getCanonicalName() + " ";
-                    msg += "\n";
-                }
-                if (printReplicas) {
-                    Map<String, Long> seFiles = RunInfoUtils.getReplicasForRun(run, logbookEntry, extension);
-                    if (seFiles != null && !seFiles.isEmpty()) {
-                        msg += "[INFO] List of replicas: ";
-                        msg += RunInfoUtils.printReplicasForLFNs(seFiles);
-                        msg += "\n";
-                    }
-                }
-                msg += "\n";
-            } else {
-                runsIterator.remove();
-            }
-        }
-        intro += "[INFO] List of runs that must be deleted: " + runs + ", nr: " + runs.size() + "\n";
-        intro += "[INFO] Storage: " + storage + "\n";
-        intro += "[INFO] Extension: " + (extension == null ? "all (.root + .tf)" : extension) + "\n\n";
-        intro += msg;
-        return intro;
     }
 }
