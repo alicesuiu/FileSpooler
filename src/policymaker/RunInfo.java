@@ -101,6 +101,10 @@ public class RunInfo {
         this.beamType = beamType;
     }
 
+    public String getBeamType() {
+        return beamType;
+    }
+
     public void setLastModified(Long lastModified) {
         this.lastModified = lastModified;
     }

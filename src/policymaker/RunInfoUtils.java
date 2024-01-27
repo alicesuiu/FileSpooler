@@ -44,9 +44,9 @@ public class RunInfoUtils {
             "vdXMiLCJuYW1lIjoiQW5vbnltb3VzIiwiYWNjZXNzIjoiYWRtaW4iLCJpYXQiOjE2Njg2ODI5NTAsImV4cCI6MTcwMDI0MDU1MCwiaX" +
             "NzIjoibzItdWkifQ.21BqUtJ1i13XIRldR0dyZLrq9jwzjfivWoEvL8c0Ot8";
 
-    private static String LOGBOOOK_TOKEN_PROD = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MCwidXNlcm5hbWUiOiJhbm9u" +
-            "eW1vdXMiLCJuYW1lIjoiQW5vbnltb3VzIiwiYWNjZXNzIjoiYWRtaW4iLCJpYXQiOjE2NjU5OTQyMTgsImV4cCI6MTY5NzU1MTgxOCwia" +
-            "XNzIjoibzItdWkifQ.zgrik9j1zn3NfyRlZrLBFHxDFdq5eiXH2IjJZFswl0M";
+    private static String LOGBOOOK_TOKEN_PROD = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MCwidXNlcm5hbWUiOiJhbm9ue" +
+            "W1vdXMiLCJuYW1lIjoiQW5vbnltb3VzIiwiYWNjZXNzIjoiYWRtaW4iLCJpYXQiOjE2OTQxNTk2MTgsImV4cCI6MTcyNTcxNzIxOCwiaXN" +
+            "zIjoibzItdWkifQ.jV2TAreh9xYwpznvoJ5Bge-jHtVxBigUVIT1CtkL_54";
     private static Logger logger = ConfigUtils.getLogger(RunInfoUtils.class.getCanonicalName());
 
     private static String encode(final String s) {
@@ -153,6 +153,13 @@ public class RunInfoUtils {
                             JSONObject lhcFill = (JSONObject) block.get("lhcFill");
                             if (lhcFill.get("beamType") != null && lhcFill.get("beamType") instanceof String)
                                 beamType = lhcFill.get("beamType").toString();
+                        }
+
+                        if (beamType == null) {
+                            if (block.get("pdpBeamType") != null && block.get("pdpBeamType") instanceof String)
+                                beamType = block.get("pdpBeamType").toString();
+                            else
+                                beamType = "none";
                         }
                         runInfo.setBeamType(beamType);
 
@@ -303,7 +310,6 @@ public class RunInfoUtils {
                         missingLogbookRecord.add(run);
                         continue;
                     }
-                    
                     if (runInfo.getTimeO2End() != null && runInfo.getTimeO2End() > 0) {
                         if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0)
                             runInfo.setRunDuration(runInfo.getTimeO2End() - runInfo.getTimeO2Start());
@@ -316,7 +322,7 @@ public class RunInfoUtils {
                     missingLogbookRecord.add(run);
                 }
             } else {
-                throw new HandleException("The PATCH request to the logbook did not work. We caught HTTP error code.", status);
+                throw new HandleException("The PATCH request to the logbook did not work for run " + run + ". We caught HTTP error code.", status);
             }
         }
 
@@ -462,6 +468,7 @@ public class RunInfoUtils {
             runInfoSet = parseRunInfoLogsJSON(response.body());
         } catch (Exception e) {
             logger.log(Level.WARNING, "Communication error " + e);
+            //return null;
         }
 
         return runInfoSet;
@@ -573,7 +580,6 @@ public class RunInfoUtils {
                 lfnsIterator.remove();
             }
         }
-
         logger.log(Level.INFO, "Lfns list size after get from collection: " + lfns.size());
         return lfns;
     }
@@ -610,6 +616,20 @@ public class RunInfoUtils {
                 lfns.add(lfn);
         }
         logger.log(Level.INFO, "Lfns list size after get from rawdata details: " + lfns.size());
+        return lfns;
+    }
+
+    public static Set<LFN> getLFNsFromRawdata(String startingDir) {
+        DB db = new DB();
+        String select = "select lfn from rawdata where lfn like '" + startingDir + "%';";
+        Set<LFN> lfns = new HashSet<>();
+        db.query(select);
+        while (db.moveNext()) {
+            LFN lfn = LFNUtils.getLFN(db.gets("lfn"));
+            if (lfn != null && lfn.isFile())
+                lfns.add(lfn);
+        }
+        logger.log(Level.INFO, "Lfns list size after get from rawdata: " + lfns.size());
         return lfns;
     }
 
@@ -654,7 +674,7 @@ public class RunInfoUtils {
 
     public static Set<LFN> getFirstXLfns(Set<LFN> lfns, Integer limit) {
         return lfns.stream().sorted(Comparator.comparingInt(lfn -> lfn.getCanonicalName().hashCode()))
-                .limit(limit)
+                .limit(limit * lfns.size() / 100)
                 .collect(Collectors.toCollection(HashSet::new));
     }
 

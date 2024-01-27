@@ -71,8 +71,11 @@ public class MoveUtils {
             else
                 filter = extension;
 
+             /*logger.log(Level.INFO, "Insert for run " + run + ": " + action + ", " + filter + ", " + log_message + ", "
+                + lfns.size() + ", " + lfns.stream().mapToLong(lfn -> lfn.size).sum() + ", " + sourcese + ", " + targetSE);*/
+
             int ret = RunActionUtils.insertRunAction(run, action, filter, "Move Thread", log_message, lfns.size(),
-                    lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, targetSE, "Done");
+                    lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, targetSE, "Done", limit);
 
             if (ret >= 0) {
                 TransferManager.addToTransfer(transferId, lfns);

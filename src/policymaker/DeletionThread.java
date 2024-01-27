@@ -51,7 +51,7 @@ public class DeletionThread extends Thread {
 
                 RunActionUtils.insertRunAction(run, "delete replica", "all", "Deletion Thread",
                         "todo", lfns.size(), lfns.stream().mapToLong(lfn -> lfn.size).sum(),
-                        "ALICE::CERN::EOSALICEO2", null, "Queued");
+                        "ALICE::CERN::EOSALICEO2", null, "Queued", null);
 
             }
 

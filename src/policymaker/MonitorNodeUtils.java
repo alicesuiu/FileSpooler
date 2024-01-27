@@ -28,6 +28,29 @@ public class MonitorNodeUtils {
     private static final Pattern patternActiveNodes = Pattern.compile(regexActiveNodes);
     private static final String GET_ACTIVE_NODES = "http://alice-epn.cern.ch:8080/api/v0-monitoring/active-nodes";
     private static final long RUNNING_EXPIRATION_INTERVAL = 15 * 60 * 1000L;
+
+    public static enum ErrorCodes {
+        METADATA_DIR_NOT_WRITABLE(1, "Metadata directory (/data/epn2eos_tool/epn2eos) is not writable"),
+        REGISTRATION_DIR_NOT_WRITABLE(2, "Registration directory (/data/epn2eos_tool/daqSpool) is not writable"),
+        TRANSFER_ERRORS_DIR_NOT_WRITABLE(4, "Transfer errors directory (/data/epn2eos_tool/error) is not writable"),
+        REGISTRATION_ERRORS_DIR_NOT_WRITABLE(8, "Registration errors directory (/data/epn2eos_tool/errorReg) is not writable"),
+        DISK_FULL(16, "EPN2EOS exited since the disk was full and it could not manage its files");
+        private final int value;
+        private final String value_string;
+        ErrorCodes(final int value, final String value_string) {
+            this.value = value;
+            this.value_string = value_string;
+        }
+
+        public int getValue() {
+            return value;
+        }
+
+        public String getValue_string() {
+            return value_string;
+        }
+    }
+
     public static Set<String> getProdNodes() {
         Set<String> nodes = new TreeSet<>();
 
@@ -56,7 +79,38 @@ public class MonitorNodeUtils {
         return nodes;
     }
 
-    public static Map<String, Long> getAlimonitorNodes() {
+    public static Map<ErrorCodes, Set<String>> getDiskErrorNodes() {
+        final monPredicate pred = Formatare.toPred("alicdb3.cern.ch/ALIEN_spooler.Main_Nodes/*/-180000/-1/disk_full_error");
+        final Vector<?> v = Cache.getLastValues(pred);
+        final List<TimestampedResult> l = Cache.filterByTime(v, pred);
+        final Set<String> prodNodes = getProdNodes();
+        final Map<ErrorCodes, Set<String>> nodes = new TreeMap<>();
+
+        for (final TimestampedResult tr : l) {
+            final Result r = (Result) tr;
+
+            final int param = (int) r.param[0];
+            final String nodeName = r.NodeName;
+            Matcher matcher = patternActiveNodes.matcher(nodeName);
+            String node = null;
+
+            if (matcher.find())
+                node = matcher.group(1);
+
+            if (param <= 0)
+                continue;
+
+            if (node == null || !prodNodes.contains(node))
+                continue;
+
+            for (final ErrorCodes ec : ErrorCodes.values())
+                if ((param & ec.value) != 0)
+                    nodes.computeIfAbsent(ec, (k) -> new TreeSet<>()).add(node);
+        }
+        return nodes;
+    }
+
+    public static Map<String, Long> getJvmUptimeNodes() {
         final monPredicate pred = Formatare.toPred("alicdb3.cern.ch/ALIEN_Self_epn2eos_Nodes/*/-1/-1/jvm_uptime");
         final Vector<TimestampedResult> v = Cache.getLastValues(pred);
         Map<String, Long> nodes = new TreeMap<>();
@@ -84,7 +138,7 @@ public class MonitorNodeUtils {
     public static Map<String, MonitorNode> getAllNodes() {
         Set<String> prodNodes = getProdNodes();
         Set<String> dbNodes = getDBNodes();
-        Map<String, Long> monitoredNodes = getAlimonitorNodes();
+        Map<String, Long> monitoredNodes = getJvmUptimeNodes();
         Set<String> notProdNodes = new TreeSet<>();
         Map<String, MonitorNode> allNodes = new TreeMap<>();
 

@@ -38,7 +38,7 @@ public class RunInfoThread extends Thread {
 
             String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on"
                 + " ra.run=rr.run and action='delete' where mintime >= " + minTime + " and maxtime <= " + maxTime
-                + " and daq_transfercomplete IS NULL and action IS NULL;";
+                + " and (daq_transfercomplete IS NULL or beamtype IS NULL) and action IS NULL;";
 
             Set<Long> newRuns = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
             try {

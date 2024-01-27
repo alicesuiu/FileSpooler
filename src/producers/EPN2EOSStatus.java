@@ -1,25 +1,23 @@
 package producers;
 
-import alien.config.ConfigUtils;
-import lazyj.Utils;
-import lazyj.mail.Mail;
-import lazyj.mail.Sendmail;
-import lia.Monitor.Store.Cache;
-import lia.Monitor.monitor.AppConfig;
-import lia.Monitor.monitor.Result;
-import lia.Monitor.monitor.TimestampedResult;
-import lia.Monitor.monitor.monPredicate;
-import lia.Monitor.JiniClient.Store.DataProducer;
-import lia.web.utils.Formatare;
-import policymaker.MonitorNode;
-import policymaker.MonitorNodeUtils;
-
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
-import java.util.*;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.Vector;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+
+import alien.config.ConfigUtils;
+import policymaker.MonitorNode;
+import policymaker.MonitorNodeUtils;
+import lazyj.Utils;
+import lazyj.mail.Mail;
+import lazyj.mail.Sendmail;
+import lia.Monitor.JiniClient.Store.DataProducer;
+import lia.Monitor.monitor.AppConfig;
 
 /**
  * @author costing, asuiu
@@ -27,33 +25,33 @@ import java.util.stream.Collectors;
  */
 public class EPN2EOSStatus implements DataProducer {
     private static final long REARM_INTERVAL = 1000L * 60 * 60;
+
     private static final long EXECUTION_INTERVAL = 1000L * 60;
+
     private static final int CONSECUTIVE_ERRORS = 5;
+
     private static final long START_SENDING_ALERTS = 5 * 60 * 1000L;
 
-    private static enum ErrorCodes {
-        METADATA_DIR_NOT_WRITABLE(1, "Metadata directory (/data/epn2eos_tool/epn2eos) is not writable"),
-        REGISTRATION_DIR_NOT_WRITABLE(2, "Registration directory (/data/epn2eos_tool/daqSpool) is not writable"),
-        TRANSFER_ERRORS_DIR_NOT_WRITABLE(4, "Transfer errors directory (/data/epn2eos_tool/error) is not writable"),
-        REGISTRATION_ERRORS_DIR_NOT_WRITABLE(8, "Registration errors directory (/data/epn2eos_tool/errorReg) is not writable"),
-        DISK_FULL(16, "EPN2EOS exited since the disk was full and it could not manage its files");
-        private final int value;
-        private final String value_string;
-        ErrorCodes(final int value, final String value_string) {
-            this.value = value;
-            this.value_string = value_string;
-        }
-    }
     private static final Logger logger = ConfigUtils.getLogger(EPN2EOSStatus.class.getCanonicalName());
+
     private long lastRun = 0;
+
     private long lastDiskEmailSent = 0;
+
     private long lastRunningEmailSent = 0;
+
     private int errorsDiskSeenSoFar = 0;
+
     private int errorsRunningSeenSoFar = 0;
+
     private String emailBody = null;
+
     private String subject = null;
+
     private Set<String> prevRunningNodesStatus = new TreeSet<>();
+
     RuntimeMXBean rb = ManagementFactory.getRuntimeMXBean();
+
     @Override
     public Vector<Object> getResults() {
         if (System.currentTimeMillis() - lastRun < EXECUTION_INTERVAL)
@@ -103,6 +101,8 @@ public class EPN2EOSStatus implements DataProducer {
     }
 
     private void sendMail() {
+        if (!AppConfig.getb(EPN2EOSStatus.class.getCanonicalName() + ".emailEnabled", true))
+            return;
         try {
             final Mail m = new Mail();
             m.sFrom = "epn2eos-support@cern.ch";
@@ -122,31 +122,11 @@ public class EPN2EOSStatus implements DataProducer {
      * @return <code>true</code> if all nodes are in a good state, <code>false</code> otherwise and {@link #emailBody} filled with the message to (maybe) send out
      */
     private boolean getNodesDiskStatus() {
-        final monPredicate pred = Formatare.toPred("alicdb3.cern.ch/ALIEN_spooler.Main_Nodes/*/-180000/-1/disk_full_error");
-
-        final Vector<?> v = Cache.getLastValues(pred);
-        final List<TimestampedResult> l = Cache.filterByTime(v, pred);
-
-        final Map<ErrorCodes, Set<String>> nodesInState = new TreeMap<>();
-
+        final Map<MonitorNodeUtils.ErrorCodes, Set<String>> nodesInState = MonitorNodeUtils.getDiskErrorNodes();
         emailBody = "";
 
-        for (final TimestampedResult tr : l) {
-            final Result r = (Result) tr;
-
-            final int param = (int) r.param[0];
-            final String nodeName = r.NodeName;
-
-            if (param <= 0)
-                continue;
-
-            for (final ErrorCodes ec : ErrorCodes.values())
-                if ((param & ec.value) != 0)
-                    nodesInState.computeIfAbsent(ec, (k) -> new TreeSet<>()).add(nodeName);
-        }
-
-        for (final Map.Entry<ErrorCodes, Set<String>> entry : nodesInState.entrySet())
-            emailBody += "<B>" + entry.getKey().value_string + "</B><br>Nodes: " + String.join(", ", entry.getValue()) + "<br><br>";
+        for (final Map.Entry<MonitorNodeUtils.ErrorCodes, Set<String>> entry : nodesInState.entrySet())
+            emailBody += "<B>" + entry.getKey().getValue_string() + "</B><br>Nodes: " + String.join(", ", entry.getValue()) + "<br><br>";
 
         if (!nodesInState.isEmpty()) {
             subject = "EPN2EOS disk status - errors detected";

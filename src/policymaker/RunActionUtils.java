@@ -31,9 +31,10 @@ public class RunActionUtils {
         String action = runAction.getAction();
         Long run = runAction.getRun();
         String sourcese = runAction.getSourcese();
+        Integer percentage = runAction.getPercentage();
         Map<String, Object> values = new HashMap<>();
         if (action.equalsIgnoreCase("delete replica")) {
-            if (sourcese != null && sourcese.length() > 0) {
+            if (sourcese != null && sourcese.length() > 0 && (percentage == 0 || percentage == 100)) {
                 Map<String, String> runActionInfo = getPreviousActionInfo(run);
                 values.put("run", run);
                 if (filter.equalsIgnoreCase("all")) {
@@ -51,7 +52,7 @@ public class RunActionUtils {
                     values.put("other", removeWordString(runActionInfo.get("other"), sourcese));
                 }
             }
-        } else if (action.equalsIgnoreCase("delete")) {
+        } else if (action.equalsIgnoreCase("delete") && (percentage == 0 || percentage == 100)) {
             values.put("run", run);
             if (filter.equalsIgnoreCase("all")) {
                 values.put("ctf", null);
@@ -102,6 +103,7 @@ public class RunActionUtils {
         Long run = runAction.getRun();
         String sourcese = runAction.getSourcese();
         String targetse = runAction.getTargetse();
+        Integer percentage = runAction.getPercentage();
         Map<String, Object> values = new HashMap<>();
         Map<String, String> runActionInfo = getPreviousActionInfo(run);
         String ctf = runActionInfo.get("ctf"), tf = runActionInfo.get("tf"),
@@ -109,7 +111,7 @@ public class RunActionUtils {
         String action = runAction.getAction();
 
         if (sourcese != null && sourcese.length() > 0) {
-            if (action.equalsIgnoreCase("move")) {
+            if (action.equalsIgnoreCase("move") && (percentage == 0 || percentage == 100)) {
                 ctf = removeWordString(ctf, sourcese);
                 tf = removeWordString(tf, sourcese);
                 calib = removeWordString(calib, sourcese);
@@ -121,7 +123,7 @@ public class RunActionUtils {
                 other = concatStrings(sourcese, other);
             }
         } else {
-            if (action.equalsIgnoreCase("move")) {
+            if (action.equalsIgnoreCase("move") && (percentage == 0 || percentage == 100)) {
                 ctf = removeWordString(ctf, DEFAULT_SE);
                 tf = removeWordString(tf, DEFAULT_SE);
                 calib = removeWordString(calib, DEFAULT_SE);
@@ -179,7 +181,7 @@ public class RunActionUtils {
     }
 
     public static void retrofitRawdataRunsLastAction(Long run) {
-        String select = "select run, filter, action, sourcese, targetse from rawdata_runs_action where run = " +
+        String select = "select run, filter, action, sourcese, targetse, percentage from rawdata_runs_action where run = " +
                 run + " order by addtime;";
         DB db = new DB(select);
         while (db.moveNext()) {
@@ -187,6 +189,7 @@ public class RunActionUtils {
             String action = db.gets("action", "");
             String sourcese = db.gets("sourcese", "");
             String targetse = db.gets("targetse", "");
+            Integer percentage = db.geti("percentage", 0);
 
             RunAction runAction = new RunAction();
             runAction.setRun(run);
@@ -194,6 +197,7 @@ public class RunActionUtils {
             runAction.setFilter(filter);
             runAction.setSourcese(sourcese);
             runAction.setTargetse(targetse);
+            runAction.setPercentage(percentage);
 
             logger.log(Level.INFO, runAction.toString());
             applyLastAction(runAction);
@@ -219,8 +223,8 @@ public class RunActionUtils {
     }
 
     public static int insertRunAction(Long run, String action, String filter, String source,
-                                       String log_message, Integer counter, Long size, String sourcese,
-                                       String targetse, String status) {
+                                      String log_message, Integer counter, Long size, String sourcese,
+                                      String targetse, String status, Integer percentage) {
         Map<String, Object> values = new HashMap<>();
         values.put("filter", filter);
         values.put("counter", counter);
@@ -232,8 +236,30 @@ public class RunActionUtils {
         values.put("sourcese", sourcese);
         values.put("targetse", targetse);
         values.put("status", status);
+        values.put("percentage", percentage);
 
         DB db = new DB();
+        String select = "select * from rawdata_runs_action where run = " + run + " and filter = '" + filter
+                + "' and status = 'In progress' and log_message = 'todo';";
+        db.query(select);
+        if (db.moveNext()) {
+            if (sourcese != null)
+                sourcese = "'" + sourcese + "'";
+            if (targetse != null)
+                targetse = "'" + targetse + "'";
+            String update = "update rawdata_runs_action set status = '" + status + "', log_message = '" + log_message
+                    + "', action = '" + action + "', counter = " + counter + ", size = " + size + ", sourcese = " + sourcese
+                    + ", targetse = " + targetse + ", percentage = " + percentage + " where run = " + run + " and filter = '"
+                    + filter + "' and status = 'In progress' and log_message = 'todo';";
+            logger.log(Level.INFO, update);
+            if (!db.syncUpdateQuery(update)) {
+                logger.log(Level.WARNING, "The update action for run " + run + " failed " + db.getLastError());
+                return -1;
+            }
+            return 0;
+        }
+
+
         String insert = DBFunctions.composeInsert("rawdata_runs_action", values);
         logger.log(Level.INFO, insert);
         if (!db.query(insert)) {

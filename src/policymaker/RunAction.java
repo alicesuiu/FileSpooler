@@ -6,6 +6,7 @@ public class RunAction {
     private String filter;
     private String sourcese;
     private String targetse;
+    private Integer percentage;
 
     public void setRun(Long run) {
         this.run = run;
@@ -25,6 +26,10 @@ public class RunAction {
 
     public void setTargetse(String targetse) {
         this.targetse = targetse;
+    }
+
+    public void setPercentage(Integer percentage) {
+        this.percentage = percentage;
     }
 
     public Long getRun() {
@@ -47,14 +52,19 @@ public class RunAction {
         return targetse;
     }
 
+    public Integer getPercentage() {
+        return percentage;
+    }
+
     @Override
     public String toString() {
-        return "RunAction: {" +
+        return "RunAction{" +
                 "run=" + run +
                 ", action='" + action + '\'' +
                 ", filter='" + filter + '\'' +
                 ", sourcese='" + sourcese + '\'' +
                 ", targetse='" + targetse + '\'' +
+                ", percentage=" + percentage +
                 '}';
     }
 }
