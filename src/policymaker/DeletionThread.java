@@ -43,8 +43,9 @@ public class DeletionThread extends Thread {
             Iterator<Long> it = runs.iterator();
             while (it.hasNext()) {
                 Long run = it.next();
-                Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, null, null, "ALICE::CERN::EOSALICEO2", null);
-                if (lfns == null || lfns.isEmpty()) {
+                Set<LFN> lfns = RunInfoUtils.getLFNsFromRawdataDetails(run);
+                DeletionUtils.filterLFNs(lfns, null, "ALICE::CERN::EOSALICEO2", null);
+                if (lfns.isEmpty()) {
                     it.remove();
                     continue;
                 }
@@ -55,7 +56,7 @@ public class DeletionThread extends Thread {
 
             }
 
-            if (runs.size() > 0) {
+            if (!runs.isEmpty()) {
                 logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
                 String sTo = "Alice Suiu <alicesuiu17@gmail.com>";
                 String sFrom = "monalisa@cern.ch";

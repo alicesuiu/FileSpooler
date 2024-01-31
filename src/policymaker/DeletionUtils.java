@@ -13,17 +13,6 @@ import java.util.logging.Logger;
 public class DeletionUtils {
     private static Logger logger = ConfigUtils.getLogger(DeletionUtils.class.getCanonicalName());
     private static List<Long> deletionFailed = new ArrayList<>();
-    private static void filterLFNs(Set<LFN> lfns, String extension, String storage) {
-        if (extension != null && !extension.isEmpty()) {
-            RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
-        } else {
-            RunInfoUtils.getAllLFNs(lfns);
-        }
-
-        if (storage != null && !storage.isEmpty()) {
-            RunInfoUtils.getLfnsFromCertainStorage(lfns, storage);
-        }
-    }
 
     public static Set<LFN> getLFNsForDeletion(String startDir, String extension, String storage, Integer limit) {
         Set<LFN> lfns = new HashSet<>();
@@ -32,50 +21,30 @@ public class DeletionUtils {
             return lfns;
 
         lfns = RunInfoUtils.getLFNsFromRawdata(startDir);
-        filterLFNs(lfns, extension, storage);
-
+        if (extension != null && !extension.isEmpty())
+            RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
+        if (storage != null && !storage.isEmpty())
+            RunInfoUtils.getLfnsFromCertainStorage(lfns, storage);
         if (limit != null && limit > 0 && limit <= 100) {
             lfns = RunInfoUtils.getFirstXLfns(lfns, limit);
             logger.log(Level.INFO, "Lfns list size after apply limit " + limit + "%: " + lfns.size());
         }
-
-        if (!lfns.isEmpty()) {
+        if (!lfns.isEmpty())
             logger.log(Level.INFO, "LFNs to be deleted: " + lfns.size());
-        }
         return lfns;
     }
 
-    public static Set<LFN> getLFNsForDeletion(Long run, Boolean logbookEntry, String extension, String storage, Integer limit) {
-        Set<LFN> lfns;
-
-        if (logbookEntry == null)
-            lfns = RunInfoUtils.getLFNsFromRawdataDetails(run);
-        else
-            lfns = RunInfoUtils.getLFNsFromCollection(run, logbookEntry);
-
-        filterLFNs(lfns, extension, storage);
-
-        Map<String, Long> countSizePair = RunInfoUtils.getCountSizeRun(run);
-        long count = countSizePair.get("count");
-        long size = countSizePair.get("size");
-        if (count <= 0 || size <= 0) {
-            logger.log(Level.WARNING, "[Maybe] The " + run + " run was deleted");
-            //return null;
-        }
-        if (extension == null && count != lfns.size()) {
-            logger.log(Level.WARNING, "The number of LFNs from rawdata_runs (" + count
-                    + ") for run " + run + " is different than the one in the LFNs list (" + lfns.size() + ")");
-        }
-
+    public static void filterLFNs(Set<LFN> lfns, String extension, String storage, Integer limit) {
+        if (extension != null && !extension.isEmpty())
+            RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
+        if (storage != null && !storage.isEmpty())
+            RunInfoUtils.getLfnsFromCertainStorage(lfns, storage);
         if (limit != null && limit > 0 && limit <= 100) {
             lfns = RunInfoUtils.getFirstXLfns(lfns, limit);
             logger.log(Level.INFO, "Lfns list size after apply limit " + limit + "%: " + lfns.size());
         }
-
-        if (!lfns.isEmpty()) {
+        if (!lfns.isEmpty())
             logger.log(Level.INFO, "LFNs to be deleted: " + lfns.size());
-        }
-        return lfns;
     }
 
     private static void deleteRun(Long run, Set<LFN> lfns, String extension, String storage, Integer limit) {
@@ -83,7 +52,7 @@ public class DeletionUtils {
         SE se = null;
         String action = "", sourcese = null, filter;
 
-        if (storage != null && storage.length() > 0)
+        if (storage != null && !storage.isEmpty())
             se = SEUtils.getSE(storage);
 
         Iterator<LFN> lfnsIterator = lfns.iterator();

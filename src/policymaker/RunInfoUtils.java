@@ -616,6 +616,17 @@ public class RunInfoUtils {
                 lfns.add(lfn);
         }
         logger.log(Level.INFO, "Lfns list size after get from rawdata details: " + lfns.size());
+
+        Iterator<LFN> lfnsIterator = lfns.iterator();
+        while (lfnsIterator.hasNext()) {
+            LFN lfn = lfnsIterator.next();
+            String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
+            if (!lfnName.endsWith(".root") && !lfnName.endsWith(".tf")) {
+                logger.log(Level.WARNING, lfn.getCanonicalName() + " has incorrect extension");
+                lfnsIterator.remove();
+            }
+        }
+        logger.log(Level.INFO, "Lfns list size (.root + .tf) : " + lfns.size());
         return lfns;
     }
 
@@ -630,6 +641,7 @@ public class RunInfoUtils {
                 lfns.add(lfn);
         }
         logger.log(Level.INFO, "Lfns list size after get from rawdata: " + lfns.size());
+        getAllLFNs(lfns);
         return lfns;
     }
 
