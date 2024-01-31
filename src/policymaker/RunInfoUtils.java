@@ -690,9 +690,62 @@ public class RunInfoUtils {
                 .collect(Collectors.toCollection(HashSet::new));
     }
 
+    public static boolean isTF(String lfnName) {
+        return lfnName.matches(".*/o2_rawtf_.*\\.tf");
+    }
+
+    public static boolean isCTF(String lfnName) {
+        return lfnName.matches(".*/o2_ctf_.*\\.root");
+    }
+
+    public static Map<String, Pair<Integer, Long>> getLFNsType(Set<LFN> lfns) {
+        Map<String, Pair<Integer, Long>> lfnsType = new HashMap<>();
+        lfnsType.put("ctf", new Pair<>(0,  0L));
+        lfnsType.put("tf", new Pair<>(0,  0L));
+        lfnsType.put("other", new Pair<>(0,  0L));
+
+        for (LFN lfn : lfns) {
+            if (isTF(lfn.getCanonicalName())) {
+                Pair<Integer, Long> countSize = lfnsType.get("tf");
+                lfnsType.put("tf", new Pair<>(countSize.getFirst() + 1, countSize.getSecond() + lfn.size));
+            } else if (isCTF(lfn.getCanonicalName())) {
+                Pair<Integer, Long> countSize = lfnsType.get("ctf");
+                lfnsType.put("ctf", new Pair<>(countSize.getFirst() + 1, countSize.getSecond() + lfn.size));
+            } else {
+                Pair<Integer, Long> countSize = lfnsType.get("other");
+                lfnsType.put("other", new Pair<>(countSize.getFirst() + 1, countSize.getSecond() + lfn.size));
+            }
+        }
+        return lfnsType;
+    }
+
+    public static Map<String, Pair<Integer, Long>> getLFNsType(Long run) {
+        Map<String, Pair<Integer, Long>> lfnsType = new HashMap<>();
+        long ctfFileSize, tfFileSize, otherFileSize;
+        int ctfFileCount, tfFileCount, otherFileCount;
+        DB db = new DB();
+
+        String select = "select tf_file_count, tf_file_size, ctf_file_count, ctf_file_size, " +
+                "other_file_count, other_file_size from rawdata_runs where run=" + run + ";";
+        db.query(select);
+        if (!db.moveNext())
+            return lfnsType;
+
+        tfFileCount = db.geti("tf_file_count", 0);
+        tfFileSize = db.getl("tf_file_size", 0);
+        ctfFileCount = db.geti("ctf_file_count", 0);
+        ctfFileSize = db.getl("ctf_file_size", 0);
+        otherFileCount = db.geti("other_file_count", 0);
+        otherFileSize = db.getl("other_file_size", 0);
+
+        lfnsType.put("tf", new Pair<>(tfFileCount, tfFileSize));
+        lfnsType.put("ctf", new Pair<>(ctfFileCount, ctfFileSize));
+        lfnsType.put("other", new Pair<>(otherFileCount,otherFileSize));
+        return lfnsType;
+    }
+
     public static Map<String, Long> getReplicasForLFNs(Set<LFN> lfns) {
         Map<String, Long> seFiles = new HashMap<>();
-
         for (LFN l : lfns) {
             GUID g = GUIDUtils.getGUID(l);
             Set<PFN> pfns = g.getPFNs();
@@ -702,7 +755,6 @@ public class RunInfoUtils {
                 seFiles.put(seName, cnt);
             }
         }
-
         return seFiles;
     }
 

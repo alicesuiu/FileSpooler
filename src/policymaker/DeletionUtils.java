@@ -4,6 +4,7 @@ import alien.catalogue.*;
 import alien.config.ConfigUtils;
 import alien.se.SE;
 import alien.se.SEUtils;
+import lazyj.DBFunctions;
 import lia.Monitor.Store.Fast.DB;
 
 import java.util.*;
@@ -136,6 +137,7 @@ public class DeletionUtils {
 
             if (ret >= 0) {
                 RunActionUtils.retrofitRawdataRunsLastAction(run);
+                updateFileCounters(run, lfns);
                 logger.log(Level.INFO, "Successful deletion of the " + run + " run");
             }
         } else {
@@ -165,6 +167,39 @@ public class DeletionUtils {
         }
     }
 
+    private static void updateFileCounters(Long run, Set<LFN> lfns) {
+        DB db = new DB();
+        String query = "select partition from rawdata_runs where run = " + run;
+        db.query(query);
+        String partition = db.gets("partition", null);
+
+        Map<String, Pair<Integer, Long>> initialCounters = RunInfoUtils.getLFNsType(run);
+        Map<String, Pair<Integer, Long>> currentCounters = RunInfoUtils.getLFNsType(lfns);
+        Integer remainingTfsCnt = Math.abs(initialCounters.get("tf").getFirst() - currentCounters.get("tf").getFirst());
+        Long remainingTfsSize = Math.abs(initialCounters.get("tf").getSecond() - currentCounters.get("tf").getSecond());
+        Integer remainingCtfsCnt = Math.abs(initialCounters.get("ctf").getFirst() - currentCounters.get("ctf").getFirst());
+        Long remainingCtfsSize = Math.abs(initialCounters.get("ctf").getSecond() - currentCounters.get("ctf").getSecond());
+        Integer remainingOtherCnt = Math.abs(initialCounters.get("other").getFirst() - currentCounters.get("other").getFirst());
+        Long remainingOtherSize = Math.abs(initialCounters.get("other").getSecond() - currentCounters.get("other").getSecond());
+
+        Map<String, Object> values = new HashMap<>();
+        values.put("tf_file_count", remainingTfsCnt);
+        values.put("tf_file_size", remainingTfsSize);
+        values.put("ctf_file_count", remainingCtfsCnt);
+        values.put("ctf_file_size", remainingCtfsSize);
+        values.put("other_file_count", remainingOtherCnt);
+        values.put("other_file_size", remainingOtherSize);
+        values.put("run", run);
+        values.put("partition", partition);
+
+        String msg = "TFs (" + remainingTfsCnt + "," + remainingTfsSize + ")" + ", CTFs (" + remainingCtfsCnt + "," +
+                remainingCtfsSize + "), Other (" + remainingOtherCnt + "," + remainingOtherSize + ")";
+        logger.log(Level.INFO, "Update counters for run " + run + ": " + msg);
+
+        query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
+        db.query(query);
+    }
+    
     public static void deleteRunsWithCertainRunQuality(Set<Long> runs, String runQuality, String extension, String storage, Integer limit) throws HandleException {
         int daqGoodFlag = RunInfoUtils.getDaqGoodFlag(runQuality);
         if (Arrays.asList(0, 1, 2).contains(daqGoodFlag)) {
