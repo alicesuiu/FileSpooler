@@ -47,7 +47,7 @@ public class DeletionUtils {
             logger.log(Level.INFO, "LFNs to be deleted: " + lfns.size());
     }
 
-    private static void deleteRun(Long run, Set<LFN> lfns, String extension, String storage, Integer limit) {
+    private static void deleteRun(Long run, Set<LFN> lfns, String extension, String storage, Integer limit, Map<String, Long> seFiles) {
         DB db = new DB();
         SE se = null;
         String action = "", sourcese = null, filter;
@@ -58,7 +58,6 @@ public class DeletionUtils {
         Iterator<LFN> lfnsIterator = lfns.iterator();
         boolean status = true, last_replica;
         long success_deleted = 0;
-        Map<String, Long> seFiles = new HashMap<>();
         while (lfnsIterator.hasNext()) {
             LFN l = lfnsIterator.next();
             last_replica = false;
@@ -69,19 +68,10 @@ public class DeletionUtils {
                         status = false;
                         logger.log(Level.WARNING, "The deletion of the " + l.getName() + " failed");
                     } else {
-                        Set<PFN> pfns = g.getPFNs();
-                        if (pfns.size() == 0) {
+                        if (g.getPFNs().isEmpty())
                             last_replica = true;
-                        } else {
+                        else
                             success_deleted += 1;
-                            for (PFN pfn : pfns) {
-                                String seName = pfn.getSE().seName;
-                                if (se != null && !seName.equalsIgnoreCase(se.seName)) {
-                                    Long cnt = seFiles.computeIfAbsent(seName, (k) -> 0L) + 1;
-                                    seFiles.put(seName, cnt);
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -109,14 +99,11 @@ public class DeletionUtils {
             if (sDaqGoodFlag == null)
                 sDaqGoodFlag = "no logbook entry for this";
 
-            if (extension == null)
-                filter = "all";
-            else if (extension.equals(".tf"))
-                filter = "tf";
-            else if (extension.equals(".root"))
-                filter = "ctf";
-            else
-                filter = extension;
+            if (se != null) {
+                seFiles.put(se.seName, seFiles.get(se.seName) - lfns.size());
+                if (seFiles.get(se.seName) <= 0)
+                    seFiles.remove(se.seName);
+            }
 
             if (storage == null || seFiles.isEmpty())
                 action = "delete";
@@ -133,6 +120,15 @@ public class DeletionUtils {
                 }
             }
 
+            if (extension == null)
+                filter = "all";
+            else if (extension.equals(".tf"))
+                filter = "tf";
+            else if (extension.equals(".root"))
+                filter = "ctf";
+            else
+                filter = extension;
+
             //logger.log(Level.INFO, "Insert: " + run + "," + action + "," + filter + "," + sourcese + "," + log_message + "," + lfns.size() + "," + lfns.stream().mapToLong(lfn -> lfn.size).sum());
 
             int ret = RunActionUtils.insertRunAction(run, action, filter, "Deletion Thread", log_message, lfns.size(),
@@ -148,14 +144,20 @@ public class DeletionUtils {
         }
     }
 
-    public static void deleteRuns(Set<Long> runs, Boolean logbookEntry, String extension, String storage, Integer limit) {
+    public static void deleteRuns(Set<Long> runs, String extension, String storage, Integer limit) {
         deletionFailed.clear();
         logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
 
         for (Long run : runs) {
-            Set<LFN> lfnsToDelete = getLFNsForDeletion(run, logbookEntry, extension, storage, limit);
-            if (lfnsToDelete != null && !lfnsToDelete.isEmpty())
-                deleteRun(run, lfnsToDelete, extension, storage, limit);
+            Set<LFN> lfnsToDelete = RunInfoUtils.getLFNsFromRawdataDetails(run);
+            Map<String, Long> seFiles = new HashMap<>();
+            if (storage != null) {
+                seFiles = RunInfoUtils.getReplicasForLFNs(lfnsToDelete);
+                logger.log(Level.INFO, "Replicas for run " + run + RunInfoUtils.printReplicasForLFNs(seFiles));
+            }
+            filterLFNs(lfnsToDelete, extension, storage, limit);
+            if (!lfnsToDelete.isEmpty())
+                deleteRun(run, lfnsToDelete, extension, storage, limit, seFiles);
         }
 
         if (!deletionFailed.isEmpty()) {
