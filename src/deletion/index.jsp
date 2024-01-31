@@ -38,7 +38,7 @@
             String sName = principal.getName();
             if (sName!=null && sName.length()>0) {
                 Set<String> sRoles = LDAPHelper.checkLdapInformation("users="+sName, "ou=Roles,", "uid");
-                bAuthOK = sRoles.contains("webadmin");
+                bAuthOK = sRoles.contains("rawdatamgr");
             }
         }
     }
@@ -99,7 +99,7 @@
     else
         sCond += (sCond.length()>0 ? " AND " : "WHERE ") + " (status='Queued' or status='In progress')";
 
-    String select = "select run, action, filter, counter, size, sourcese, source, status, addtime from rawdata_runs_action " + sCond + " order by addtime desc;";
+    String select = "select run, action, filter, counter, size, percentage, sourcese, source, status, addtime from rawdata_runs_action " + sCond + " order by addtime desc;";
 
     DB db = new DB(select);
     TreeSet<Integer> runList = new TreeSet<Integer>();

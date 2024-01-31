@@ -4,6 +4,7 @@
 <td align=right class="table_row" sorttable_customkey="<<:filter db:>>"><<:filter db esc:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:counter db:>>"><<:counter db esc:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:size db:>>"><<:size db size:>></td>
+<td align=right class="table_row" sorttable_customkey="<<:percentage db:>>"><<:percentage db esc:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:sourcese db:>>"><<:sourcese db esc:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:source db:>>"><<:source db esc:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:status db:>>"><<:status db esc:>></td>

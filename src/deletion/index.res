@@ -18,6 +18,21 @@
     function showAddForm(){
         showCenteredWindowSize('<iframe src="/admin/deletion/add.jsp" border=0 width=100% height=100% frameborder="0" marginwidth="0" marginheight="0" scrolling="yes" align="absmiddle" vspace="0" hspace="0"></iframe>', 'Add new deletion request', 800, 500);
     }
+
+    function deleteAll() {
+        var url = "https://alimonitor.cern.ch/admin/deletion/delete.jsp";
+        var runs = "";
+        var chkboxes = document.getElementsByName("bulk_del");
+        for (i=0; i< chkboxes.length; i++) {
+            if (chkboxes[i].checked) {
+                runs += chkboxes[i].value + " ";
+            }
+        }
+
+        if (runs.length > 0)
+            url += "?runs=" + runs;
+        window.location.href=url;
+    }
 </script>
 
 <form name=form1 action=/deletion/ method=POST>
@@ -41,6 +56,7 @@
             <td class="table_header"><b>Type</b></td>
             <td class="table_header"><b>Chunks</b></td>
             <td class="table_header"><b>Size</b></td>
+            <td class="table_header"><b>Percentage</b></td>
             <td class="table_header"><b>Storage</b></td>
             <td class="table_header"><b>Source</b></td>
             <td class="table_header"><b>Status</B></td>
@@ -65,6 +81,7 @@
             <td class="table_header">
                 <input type=text name=typefilter value="<<:typefilter esc:>>" class="input_text" style="width:50px">
             </td>
+            <td class="table_header"></td>
             <td class="table_header"></td>
             <td class="table_header"></td>
             <td class="table_header">
@@ -105,9 +122,10 @@
             <td class="table_header">&nbsp;</td>
             <td class="table_header">&nbsp;</td>
             <td class="table_header">&nbsp;</td>
+            <td class="table_header">&nbsp;</td>
             <td class="table_header" nowrap>
             <<:com_admin_start:>>
-                <input type="button" class="input_submit" value="Delete" onMouseOver="overlib('Delete selected runs');" onMouseOut="nd();" onClick=";"><br>
+                <input type="button" class="input_submit" value="Delete" onMouseOver="overlib('Delete selected runs');" onMouseOut="return nd();" onClick="deleteAll();"><br>
             <<:com_admin_end:>>
             </td>
             <td class="table_header">&nbsp;</td>

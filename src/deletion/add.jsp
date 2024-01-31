@@ -50,10 +50,10 @@
             </select></td>
         </tr>
 
-        <!-- <tr>
-            <td>Limit:</td>
-            <td><input type=number name=limit min=0 max=2147483647></td>
-        </tr> -->
+        <tr>
+            <td>Percentage of files to delete:</td>
+            <td><input type=number name=limit min=1 max=100></td>
+        </tr>
 
         <tr>
             <td>&nbsp;</td>
@@ -77,7 +77,7 @@
         action = "delete";
     }
 
-    if (iLimit <= 0)
+    if (iLimit <= 0 || iLimit > 100)
         iLimit = null;
 
     String q = IntervalQuery.numberInterval(sRuns, "run");
@@ -114,43 +114,10 @@
         } else {
             RunActionUtils.insertRunAction(run, action, sFilter, user,
                     "todo", lfns.size(), lfns.stream().mapToLong(lfn -> lfn.size).sum(),
-                    sStorage, null, "Queued");
+                    sStorage, null, "Queued", iLimit);
             out.println("The deletion of run " + run + " was queued.");
         }
     }
-
-    /*String result = DeletionUtils.printMessages(arrL, false, true, true, sFilter, sStorage, iLimit);
-	result = result.replaceAll("\n", "<BR>");
-	out.println(result);*/
-
-    /*Iterator<Long> runsIterator = arrL.iterator();
-    while(runsIterator.hasNext())
-    	out.println(runsIterator.next());
-    out.println(sFilter + " " + sStorage + " " + iLimit);*/
-
-   /*	Map<String, Set<String>> messages = DeletionUtils.getMessages();
-
-    if (messages != null && !messages.isEmpty()) {
-	    Set<String> infoLevel = DeletionUtils.getMessages().get("Info");
-	    Set<String> warningLevel = DeletionUtils.getMessages().get("Warning");
-
-	 	out.println(" ===== WARNING LEVEL! ===== " + " <BR>");
-	 	Iterator<String> iter = warningLevel.iterator();
-    	while(iter.hasNext()) {
-    		String m = iter.next();
-	    	if (m.contains("is different than the one in the LFNs list"))
-	    		continue;
-	    	out.println(m + "<BR>");
-	    }
-
-	    out.println(" ===== INFO LEVEL! ===== " + "<BR>");
-	    iter = infoLevel.iterator();
-	    while(iter.hasNext()) {
-	    	String m = iter.next();
-	    	if (m.contains("Successful deletion of"))
-	    		out.println(m + "<BR>");
-	    }
-	}*/
 
     lia.web.servlets.web.Utils.logRequest("/admin/deletion/add.jsp?runs="+sRuns, 1, request);
 %>
