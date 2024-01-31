@@ -2,6 +2,8 @@
 <td align=right class="table_row" sorttable_customkey="<<:run db:>>"><a href="/DAQ/?time=0&runfilter=<<:run db enc:>>"><<:run db esc:>></a></td>
 <td align=right class="table_row" sorttable_customkey="<<:action db:>>"><<:action db esc:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:filter db:>>"><<:filter db esc:>></td>
+<td align=right class="table_row" sorttable_customkey="<<:total_chunks dot:>>"><<:total_chunks dot:>></td>
+<td align=right class="table_row" sorttable_customkey="<<:total_size size:>>"><<:total_size size:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:counter db:>>"><<:counter db esc:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:size db:>>"><<:size db size:>></td>
 <td align=right class="table_row" sorttable_customkey="<<:percentage db:>>"><<:percentage db esc:>></td>

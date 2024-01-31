@@ -54,8 +54,10 @@
             <td class="table_header"><b>Run</b></td>
             <td class="table_header"><b>Action</b></td>
             <td class="table_header"><b>Type</b></td>
-            <td class="table_header"><b>Chunks</b></td>
-            <td class="table_header"><b>Size</b></td>
+            <td class="table_header"><b>Total Chunks</b></td>
+            <td class="table_header"><b>Total Size</b></td>
+            <td class="table_header"><b>Chunks to delete</b></td>
+            <td class="table_header"><b>Size to delete</b></td>
             <td class="table_header"><b>Percentage</b></td>
             <td class="table_header"><b>Storage</b></td>
             <td class="table_header"><b>Source</b></td>
@@ -81,6 +83,8 @@
             <td class="table_header">
                 <input type=text name=typefilter value="<<:typefilter esc:>>" class="input_text" style="width:50px">
             </td>
+            <td class="table_header"></td>
+            <td class="table_header"></td>
             <td class="table_header"></td>
             <td class="table_header"></td>
             <td class="table_header"></td>
@@ -118,6 +122,8 @@
             <td class="table_header">&nbsp;</td>
             <td align=right class="table_header"><<:files esc:>> files</td>
             <td align=right class="table_header"><<:totalsize size:>></td>
+            <td align=right class="table_header"><<:files_to_delete esc:>> files</td>
+            <td align=right class="table_header"><<:totalsize_to_delete size:>></td>
             <td class="table_header">&nbsp;</td>
             <td class="table_header">&nbsp;</td>
             <td class="table_header">&nbsp;</td>

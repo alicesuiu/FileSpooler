@@ -1,4 +1,5 @@
 <%@ page import="lazyj.*,alimonitor.Page,java.util.*,java.io.*,lia.Monitor.Store.Fast.DB,utils.IntervalQuery,auth.*,java.security.cert.*"%>
+<%@ page import="org.glite.security.util.DN" %>
 <%
     final ByteArrayOutputStream baos = new ByteArrayOutputStream(10000);
     final RequestWrapper rw = new RequestWrapper(request);
@@ -102,12 +103,13 @@
     String select = "select run, action, filter, counter, size, percentage, sourcese, source, status, addtime from rawdata_runs_action " + sCond + " order by addtime desc;";
 
     DB db = new DB(select);
+    DB db1 = new DB();
     TreeSet<Integer> runList = new TreeSet<Integer>();
 
     int iRuns = 0;
     int iOldRun = 0;
-    int iFiles = 0;
-    long lTotalSize = 0;
+    int iFiles_to_delete = 0, iFiles = 0;
+    long lTotalSize_to_delete = 0, lTotalSize = 0;
     while (db.moveNext()) {
         final int iRun = db.geti("run");
 
@@ -116,8 +118,15 @@
         runList.add(iRun);
         iOldRun = iRun;
 
-        iFiles += db.geti("counter");
-        lTotalSize += db.getl("size");
+        select = "select chunks, size from rawdata_runs where run = " + iRun + ";";
+        db1.query(select);
+        pLine.modify("total_chunks", db1.geti("chunks", 0));
+        iFiles += db1.geti("chunks", 0);
+        pLine.modify("total_size", db1.getl("size", 0));
+        lTotalSize += db1.getl("size", 0);
+
+        iFiles_to_delete += db.geti("counter");
+        lTotalSize_to_delete += db.getl("size");
         pLine.fillFromDB(db);
 
         iRuns++;
@@ -128,6 +137,8 @@
     p.modify("all_runs", Format.toCommaList(runList));
 
     p.modify("runs", iRuns);
+    p.modify("files_to_delete", iFiles_to_delete);
+    p.modify("totalsize_to_delete", lTotalSize_to_delete);
     p.modify("files", iFiles);
     p.modify("totalsize", lTotalSize);
 

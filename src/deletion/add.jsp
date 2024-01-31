@@ -108,7 +108,7 @@
     }
 
     for (Long run : arrL) {
-        Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, null, extension, sStorage, null);
+        Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, null, extension, sStorage, iLimit);
         if (lfns == null || lfns.isEmpty()) {
             out.println("Run " + run + " was already deleted!");
         } else {
