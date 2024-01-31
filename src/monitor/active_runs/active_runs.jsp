@@ -11,10 +11,23 @@
 <%!
     private void fillPage(final Page p, MonitorRun mr){
         p.modify("run", mr.getRun());
-        p.modify("cnt", mr.getCnt());
-        p.modify("size", mr.getSize());
-        p.modify("eta", mr.getEta());
+
+        if (mr.getCnt() > 0)
+            p.modify("cnt", mr.getCnt());
+
+        if (mr.getSize() > 0)
+            p.modify("size", mr.getSize());
+
+        if (mr.getNodes() > 0)
+            p.modify("epns", mr.getNodes());
+
+        if (mr.getEta() > 0)
+            p.modify("eta", mr.getEta());
+
         p.modify("last_seen", mr.getLastSeen());
+
+        long delay = mr.getLastSeen() - mr.getMaxTime();
+        p.modify("delay", delay);
     }
 %>
 
@@ -35,13 +48,14 @@
     final Page pMaster = new Page(baos, "WEB-INF/res/masterpage/masterpage.res", false);
     pMaster.comment("com_alternates", false);
     pMaster.modify("refresh_time", 120);
-    pMaster.modify("title", "EPN2EOS - List of active runs");
+    pMaster.modify("title", "EPN2EOS - List of runs that are transferred to storage");
 
     final Page p = new Page("epn2eos_active_runs/active_runs.res", false);
     final Page pLine = new Page("epn2eos_active_runs/active_runs_el.res", false);
 
-    long total_files = 0;
-    long total_size = 0;
+    long total_files = 0, total_registered_files = 0;
+    long total_size = 0, total_registered_size = 0;
+    double global_eta = 0;
     List<MonitorRun> list = new LinkedList<>(activeMonitorRuns.values());
     list.sort(Comparator.comparingLong(MonitorRun::getSize));
     final long total_runs = list.size();
@@ -61,23 +75,61 @@
         }
 
         if (mr.getCnt() == 0) {
-            db.query("select maxtime from rawdata_runs where run=" + mr.getRun() + ";");
-            mr.setLastSeen(db.geti(1));
+            db.query("select pn2eos_end_time from rawdata_runs where run=" + mr.getRun() + ";");
+            mr.setLastSeen(db.getl("epn2eos_end_time", 0));
+            mr.setNodes(0);
         } else {
-            mr.setLastSeen(System.currentTimeMillis());
+            mr.setLastSeen(System.currentTimeMillis() / 1000);
         }
+
+        db.query("select maxtime from rawdata_runs where run= " + mr.getRun() + ";");
+        mr.setMaxTime(db.getl("maxtime", 0));
+
+        if (global_eta < mr.getEta())
+            global_eta = mr.getEta();
     }
 
-    for (MonitorRun mr : activeMonitorRuns.values()) {
+    list = new LinkedList<>(activeMonitorRuns.values());
+    list.sort(Comparator.comparingLong(MonitorRun::getRun));
+
+    for (MonitorRun mr : list) {
         fillPage(pLine, mr);
+        db.query("select chunks, size from rawdata_runs where run= " + mr.getRun() + ";");
+
+        long chunks = db.getl("chunks", 0);
+        long size = db.getl("size", 0);
+
+        if (chunks > 0) {
+            pLine.modify("registered_cnt", chunks);
+            total_registered_files += chunks;
+        }
+
+        if (size > 0) {
+            pLine.modify("registered_size", size);
+            total_registered_size += size;
+        }
+
         p.append(pLine);
     }
 
-    final double total_eta = total_size / rate;
     p.modify("total_runs", total_runs);
-    p.modify("total_files", total_files);
-    p.modify("total_size", total_size);
-    p.modify("total_eta", total_eta);
+
+    if (total_files > 0)
+        p.modify("total_files", total_files);
+
+    if (total_size > 0)
+        p.modify("total_size", total_size);
+
+    if (global_eta > 0)
+        p.modify("total_eta", global_eta);
+
+    if (total_registered_files > 0)
+        p.modify("total_registered_files", total_registered_files);
+
+    if (total_registered_size > 0)
+        p.modify("total_registered_size", total_registered_size);
+
+    p.modify("global_rate", rate);
 
     pMaster.append(p);
     pMaster.write();
