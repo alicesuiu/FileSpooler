@@ -43,8 +43,7 @@ public class DeletionThread extends Thread {
             Iterator<Long> it = runs.iterator();
             while (it.hasNext()) {
                 Long run = it.next();
-                Set<LFN> lfns = RunInfoUtils.getLFNsFromRawdataDetails(run);
-                DeletionUtils.filterLFNs(lfns, null, "ALICE::CERN::EOSALICEO2", null);
+                Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, null, "ALICE::CERN::EOSALICEO2", null);
                 if (lfns.isEmpty()) {
                     it.remove();
                     continue;

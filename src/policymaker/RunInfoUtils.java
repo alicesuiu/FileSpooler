@@ -605,9 +605,17 @@ public class RunInfoUtils {
         return lfnsToProcess;
     }
 
-    public static Set<LFN> getLFNsFromRawdataDetails(Long run) {
+    public static Set<LFN> getLFNsFromRawdataDetails(Long run, String extension) {
         DB db = new DB();
-        String select = "select lfn from rawdata_details where run = " + run + ";";
+        String select = "select lfn from rawdata_details where run = " + run;
+
+        if (extension.equalsIgnoreCase("tf"))
+            select += " and lfn like '%/o2_rawtf_%.tf'";
+        else if (extension.equalsIgnoreCase("ctf"))
+            select += " and lfn like '%/o2_ctf_%.root'";
+
+        select += ";";
+
         Set<LFN> lfns = new HashSet<>();
         db.query(select);
         while (db.moveNext()) {
@@ -616,17 +624,6 @@ public class RunInfoUtils {
                 lfns.add(lfn);
         }
         logger.log(Level.INFO, "Lfns list size after get from rawdata details: " + lfns.size());
-
-        Iterator<LFN> lfnsIterator = lfns.iterator();
-        while (lfnsIterator.hasNext()) {
-            LFN lfn = lfnsIterator.next();
-            String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
-            if (!lfnName.endsWith(".root") && !lfnName.endsWith(".tf")) {
-                logger.log(Level.WARNING, lfn.getCanonicalName() + " has incorrect extension");
-                lfnsIterator.remove();
-            }
-        }
-        logger.log(Level.INFO, "Lfns list size (.root + .tf) : " + lfns.size());
         return lfns;
     }
 
@@ -641,35 +638,9 @@ public class RunInfoUtils {
                 lfns.add(lfn);
         }
         logger.log(Level.INFO, "Lfns list size after get from rawdata: " + lfns.size());
-        getAllLFNs(lfns);
         return lfns;
     }
 
-    public static void getLfnsWithCertainExtension(Set<LFN> lfns, String extension) {
-        Iterator<LFN> lfnsIterator = lfns.iterator();
-        while (lfnsIterator.hasNext()) {
-            LFN lfn = lfnsIterator.next();
-            String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
-            if (!lfnName.endsWith(extension)) {
-                lfnsIterator.remove();
-            }
-        }
-
-        logger.log(Level.INFO, "Lfns list size after get from extension: " + lfns.size());
-    }
-
-    public static void getAllLFNs(Set<LFN> lfns) {
-        Iterator<LFN> lfnsIterator = lfns.iterator();
-        while (lfnsIterator.hasNext()) {
-            LFN lfn = lfnsIterator.next();
-            String lfnName = lfn.getCanonicalName().substring(lfn.getCanonicalName().lastIndexOf('/') + 1);
-            if (!lfnName.endsWith(".root") && !lfnName.endsWith(".tf")) {
-                logger.log(Level.WARNING, lfn.getCanonicalName() + " has incorrect extension");
-                lfnsIterator.remove();
-            }
-        }
-        logger.log(Level.INFO, "Lfns list size (.root + .tf) : " + lfns.size());
-    }
     public static void getLfnsFromCertainStorage(Set<LFN> lfns, String storage) {
         SE se = SEUtils.getSE(storage);
 
@@ -768,31 +739,15 @@ public class RunInfoUtils {
         return msg.stripTrailing();
     }
 
-    public static Map<String, Long> getReplicasForRun(Long run, boolean logbookEntry, String extension) {
-        DB db = new DB();
-        String select = RunInfoUtils.getCollectionPathQuery(run, logbookEntry);
-        db.query(select);
-
-        String collection_path = db.gets("collection_path");
-        if (collection_path.isEmpty() || collection_path.isBlank())
-            return null;
-
-        logger.log(Level.INFO, collection_path);
-        Set<LFN> lfns = RunInfoUtils.getLFNsFromCollection(collection_path);
-
-        if (extension != null && extension.length() > 0) {
-            RunInfoUtils.getLfnsWithCertainExtension(lfns, extension);
-        } else {
-            RunInfoUtils.getAllLFNs(lfns);
-        }
-
+    public static Map<String, Long> getReplicasForRun(Long run, String extension) {
+        Set<LFN> lfns = RunInfoUtils.getLFNsFromRawdataDetails(run, extension);
         Map<String, Long> replicas = getReplicasForLFNs(lfns);
         String replicasStr = "";
         for (Map.Entry<String, Long> entry : replicas.entrySet()) {
             replicasStr += " " + entry.getKey() + " : " + entry.getValue();
         }
 
-        logger.log(Level.INFO, extension + " " + replicasStr);
+        logger.log(Level.INFO, "Replicas for run " + run + " " + replicasStr);
         return replicas;
     }
 
