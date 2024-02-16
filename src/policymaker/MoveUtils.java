@@ -16,7 +16,7 @@ public class MoveUtils {
     public static void moveRuns(Set<Long> runs, String targetSE, String sourceSE,
                                 String logMessage, String extension, String storage, Integer limit) {
         int transferId = TransferManager.getTransferId(SEUtils.getSE(targetSE), logMessage, sourceSE);
-        String action, sourcese, log_message, filter;
+        String action, sourcese, log_message;
 
         for (Long run : runs) {
             Set<LFN> lfns = RunInfoUtils.getLFNsFromRawdataDetails(run, extension);
@@ -39,14 +39,10 @@ public class MoveUtils {
                 log_message =  "copy to " + targetSE;
             }
 
-            filter = extension;
-            if (extension == null)
-                filter = "all";
-
              /*logger.log(Level.INFO, "Insert for run " + run + ": " + action + ", " + filter + ", " + log_message + ", "
                 + lfns.size() + ", " + lfns.stream().mapToLong(lfn -> lfn.size).sum() + ", " + sourcese + ", " + targetSE);*/
 
-            int ret = RunActionUtils.insertRunAction(run, action, filter, "Move Thread", log_message, lfns.size(),
+            int ret = RunActionUtils.insertRunAction(run, action, extension, "Move Thread", log_message, lfns.size(),
                     lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, targetSE, "Done", limit);
 
             if (ret >= 0) {

@@ -613,7 +613,8 @@ public class RunInfoUtils {
             select += " and lfn like '%/o2_rawtf_%.tf'";
         else if (extension.equalsIgnoreCase("ctf"))
             select += " and lfn like '%/o2_ctf_%.root'";
-
+        else if (extension.equalsIgnoreCase("other"))
+            select += " and lfn not like '%/o2_ctf_%.root' and lfn not like '%/o2_rawtf_%.tf'";
         select += ";";
 
         Set<LFN> lfns = new HashSet<>();

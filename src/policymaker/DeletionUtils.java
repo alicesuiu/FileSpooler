@@ -53,7 +53,7 @@ public class DeletionUtils {
     private static void deleteRun(Long run, Set<LFN> lfns, String extension, String storage, Integer limit, Map<String, Long> seFiles) {
         DB db = new DB();
         SE se = null;
-        String action = "", sourcese = null, filter;
+        String action = "", sourcese = null;
 
         if (storage != null && !storage.isEmpty())
             se = SEUtils.getSE(storage);
@@ -123,13 +123,9 @@ public class DeletionUtils {
                 }
             }
 
-            filter = extension;
-            if (extension == null)
-                filter = "all";
+            //logger.log(Level.INFO, "Insert: " + run + "," + action + "," + extension + "," + sourcese + "," + log_message + "," + lfns.size() + "," + lfns.stream().mapToLong(lfn -> lfn.size).sum());
 
-            //logger.log(Level.INFO, "Insert: " + run + "," + action + "," + filter + "," + sourcese + "," + log_message + "," + lfns.size() + "," + lfns.stream().mapToLong(lfn -> lfn.size).sum());
-
-            int ret = RunActionUtils.insertRunAction(run, action, filter, "Deletion Thread", log_message, lfns.size(),
+            int ret = RunActionUtils.insertRunAction(run, action, extension, "Deletion Thread", log_message, lfns.size(),
                     lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, null, "Done", limit);
 
             if (ret >= 0) {

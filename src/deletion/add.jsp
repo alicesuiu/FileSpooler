@@ -46,6 +46,8 @@
                     out.println("<option value='"+s+"'>"+s+"</option>");
                     s = Format.escHtml("CTF");
                     out.println("<option value='"+s+"'>"+s+"</option>");
+                    s = Format.escHtml("Other");
+                    out.println("<option value='"+s+"'>"+s+"</option>");
                 %>
             </select></td>
         </tr>
@@ -64,12 +66,6 @@
 <%
         return;
     }
-
-    String extension = null;
-    if (sFilter.equals("tf"))
-        extension = ".tf";
-    else if (sFilter.equals("ctf"))
-        extension = ".root";
 
     String action = "delete replica";
     if (sStorage.equals("all")) {
@@ -108,7 +104,7 @@
     }
 
     for (Long run : arrL) {
-        Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, null, extension, sStorage, iLimit);
+        Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, sFilter, sStorage, iLimit);
         if (lfns == null || lfns.isEmpty()) {
             out.println("Run " + run + " was already deleted!");
         } else {
