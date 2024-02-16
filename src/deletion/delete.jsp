@@ -117,13 +117,7 @@
                     continue;
             }
 
-            String extension = null;
             String filter = db.gets("filter");
-            if (filter.equals("tf"))
-                extension = ".tf";
-            else if (filter.equals("ctf"))
-                extension = ".root";
-
             String storage = db.gets("sourcese");
             Integer percentage = db.geti("percentage", 0);
 
@@ -134,7 +128,7 @@
             }
             logMessage("Update raw for run : " + run + " in rawdata_runs_action");
 
-            DeletionUtils.deleteRuns(new HashSet<>(Arrays.asList(run)), null, extension, storage, percentage);
+            DeletionUtils.deleteRuns(new HashSet<>(Arrays.asList(run)), null, filter, storage, percentage);
             out.println("Run " + run + "was successfully deleted!<br>");
         }
     }

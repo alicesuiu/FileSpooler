@@ -240,7 +240,7 @@ public class RunActionUtils {
 
         DB db = new DB();
         String select = "select * from rawdata_runs_action where run = " + run + " and filter = '" + filter
-                + "' and status = 'In progress' and log_message = 'todo';";
+                + "' and (status = 'In progress' or status = 'Queued') and log_message = 'todo';";
         db.query(select);
         if (db.moveNext()) {
             if (sourcese != null)
@@ -258,7 +258,6 @@ public class RunActionUtils {
             }
             return 0;
         }
-
 
         String insert = DBFunctions.composeInsert("rawdata_runs_action", values);
         logger.log(Level.INFO, insert);
