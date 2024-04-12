@@ -21,6 +21,7 @@ public class RunInfo {
     private Long runDuration;
     private String aliceL3Polarity;
     private String aliceDipolePolarity;
+    private Double aliceL3Current;
     private String beamType;
     private Long lastModified;
     private String lhcPeriod;
@@ -57,6 +58,10 @@ public class RunInfo {
         return runQuality;
     }
 
+    public String getLhcBeamMode() {
+        return lhcBeamMode;
+    }
+
     public void setRunQuality(String runQuality) {
         this.runQuality = runQuality;
     }
@@ -65,8 +70,16 @@ public class RunInfo {
         this.runType = runType;
     }
 
+    public String getRunType() {
+        return runType;
+    }
+
     public void setDetectors(String detectors) {
         this.detectors = detectors;
+    }
+
+    public String getDetectors() {
+        return detectors;
     }
 
     public Long getTimeO2Start() {
@@ -89,12 +102,24 @@ public class RunInfo {
         this.runDuration = runDuration;
     }
 
+    public Long getRunDuration() {
+        return runDuration;
+    }
+
     public void setAliceL3Polarity(String aliceL3Polarity) {
         this.aliceL3Polarity = aliceL3Polarity;
     }
 
     public void setAliceDipolePolarity(String aliceDipolePolarity) {
         this.aliceDipolePolarity = aliceDipolePolarity;
+    }
+
+    public void setAliceL3Current(Double aliceL3Current) {
+        this.aliceL3Current = aliceL3Current;
+    }
+
+    public Double getAliceL3Current() {
+        return aliceL3Current;
     }
 
     public void setBeamType(String beamType) {
@@ -203,6 +228,7 @@ public class RunInfo {
                 ", beamType: '" + beamType + '\'' +
                 ", aliceDipolePolarity: '" + aliceDipolePolarity + '\'' +
                 ", aliceL3Polarity: '" + aliceL3Polarity + '\'' +
+                ", aliceL3Current: " + aliceL3Current +
                 ", startOfDataTransfer: " + startOfDataTransfer +
                 ", endOfDataTransfer: " + endOfDataTransfer +
                 ", ctfFileSize: '" + ctfFileSize + '\'' +
@@ -288,10 +314,10 @@ public class RunInfo {
             while (db.moveNext()) {
                 int existingDaqGoodFlag = db.geti("daq_goodflag", -1);
                 if (Arrays.asList(0, 1, 2).contains(existingDaqGoodFlag) && Arrays.asList(0, 1, 2).contains(daqGoodFlag) && existingDaqGoodFlag != daqGoodFlag) {
-                    String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message) " +
+                    String insert = "insert into rawdata_runs_action (run, action, filter, counter, size, source, log_message, responsible) " +
                             " select " + runNumber + ", 'change run quality', 'all', chunks, size, 'logbook', " +
                             "'run quality was changed from " + RunInfoUtils.getRunQuality(existingDaqGoodFlag) + " to " + runQuality +
-                            "' from rawdata_runs where run=" + runNumber + ";";
+                            "', 'logbook' from rawdata_runs where run=" + runNumber + ";";
 
                     if (!db.syncUpdateQuery(insert))
                         return;

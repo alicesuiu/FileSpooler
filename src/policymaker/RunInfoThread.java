@@ -37,41 +37,37 @@ public class RunInfoThread extends Thread {
             long maxTime = (currentTime - DELTA) / 1000;
 
             String select = "select rr.run from rawdata_runs rr left outer join rawdata_runs_action ra on"
-                + " ra.run=rr.run and action='delete' where mintime >= " + minTime + " and maxtime <= " + maxTime
-                + " and (daq_transfercomplete IS NULL or beamtype IS NULL) and action IS NULL;";
+                    + " ra.run=rr.run and action='delete' where mintime >= " + minTime + " and maxtime <= " + maxTime
+                    + " and (daq_transfercomplete IS NULL or beamtype IS NULL) and action IS NULL;";
 
             Set<Long> newRuns = RunInfoUtils.getSetOfRunsFromCertainSelect(select);
-            try {
-                if (!newRuns.isEmpty()) {
-                    RunInfoUtils.fetchRunInfo(newRuns);
-                    logger.log(Level.INFO, "List of new runs: " + newRuns + ", nr: " + newRuns.size());
-                }
+            if (!newRuns.isEmpty()) {
+                RunInfoUtils.fetchRunInfo(newRuns);
+                logger.log(Level.INFO, "List of new runs: " + newRuns + ", nr: " + newRuns.size());
+            }
 
-                if (updatedAt == 0) {
-                    minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                            .minusWeeks(1).toInstant().toEpochMilli();
-                    maxTime = currentTime;
-                    updatedAt = currentTime;
-                    Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
-                    if (!updatedRuns.isEmpty()) {
-                        RunInfoUtils.fetchRunInfo(updatedRuns);
-                        logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
-                    }
+            if (updatedAt == 0) {
+                minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                        .minusWeeks(1).toInstant().toEpochMilli();
+                maxTime = currentTime;
+                updatedAt = currentTime;
+                Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                if (!updatedRuns.isEmpty()) {
+                    RunInfoUtils.fetchRunInfo(updatedRuns);
+                    logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
                 }
+            }
 
-                if (currentTime - updatedAt >= HOUR) {
-                    minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
-                            .minusDays(1).toInstant().toEpochMilli();
-                    maxTime = currentTime;
-                    updatedAt = currentTime;
-                    Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
-                    if (!updatedRuns.isEmpty()) {
-                        RunInfoUtils.fetchRunInfo(updatedRuns);
-                        logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
-                    }
+            if (currentTime - updatedAt >= HOUR) {
+                minTime = ZonedDateTime.now(ZoneId.of("Europe/Zurich"))
+                        .minusDays(1).toInstant().toEpochMilli();
+                maxTime = currentTime;
+                updatedAt = currentTime;
+                Set<Long> updatedRuns = RunInfoUtils.getLastUpdatedRuns(minTime, maxTime);
+                if (!updatedRuns.isEmpty()) {
+                    RunInfoUtils.fetchRunInfo(updatedRuns);
+                    logger.log(Level.INFO, "List of updated runs: " + updatedRuns + ", nr: " + updatedRuns.size());
                 }
-            } catch (HandleException he) {
-                he.sendMail();
             }
 
             synchronized (lock) {

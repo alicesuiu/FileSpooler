@@ -8,12 +8,28 @@ import lazyj.DBFunctions;
 import lia.Monitor.Store.Fast.DB;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class DeletionUtils {
     private static Logger logger = ConfigUtils.getLogger(DeletionUtils.class.getCanonicalName());
+
     private static List<Long> deletionFailed = new ArrayList<>();
+
+    private static ExecutorService addExecutor = Executors.newFixedThreadPool(1);
+
+    private static ExecutorService delExecutor = Executors.newFixedThreadPool(1);
+
+    public static Future addTask(Long id, String table) {
+        return addExecutor.submit(new DeletionTask(id, table));
+    }
+
+    public static Future delTask(Long id, String table) {
+        return delExecutor.submit(new DeletionTask(id, table));
+    }
 
     public static Set<LFN> getLFNsForDeletion(String startDir, String storage, Integer limit) {
         Set<LFN> lfns = new HashSet<>();
@@ -30,6 +46,7 @@ public class DeletionUtils {
             lfns = RunInfoUtils.getFirstXLfns(lfns, limit);
             logger.log(Level.INFO, "Lfns list size after apply limit " + limit + "%: " + lfns.size());
         }
+
         if (!lfns.isEmpty())
             logger.log(Level.INFO, "LFNs to be deleted: " + lfns.size());
         return lfns;
@@ -45,12 +62,15 @@ public class DeletionUtils {
             lfns = RunInfoUtils.getFirstXLfns(lfns, limit);
             logger.log(Level.INFO, "Lfns list size after apply limit " + limit + "%: " + lfns.size());
         }
+
         if (!lfns.isEmpty())
             logger.log(Level.INFO, "LFNs to be deleted: " + lfns.size());
         return lfns;
     }
 
-    private static void deleteRun(Long run, Set<LFN> lfns, String extension, String storage, Integer limit, Map<String, Long> seFiles) {
+    public static void deleteRun(Long run, Set<LFN> lfns, String extension, String storage, Integer limit,
+                                 Map<String, Long> seFiles, String requester, String responsible,
+                                 Long id_record) {
         DB db = new DB();
         SE se = null;
         String action = "", sourcese = null;
@@ -123,34 +143,51 @@ public class DeletionUtils {
                 }
             }
 
-            //logger.log(Level.INFO, "Insert: " + run + "," + action + "," + extension + "," + sourcese + "," + log_message + "," + lfns.size() + "," + lfns.stream().mapToLong(lfn -> lfn.size).sum());
+            if (id_record != null) {
+                select = "select log_message from rawdata_runs_action where id_record = " + id_record + ";";
+                db.query(select);
+                String prev_log_message = db.gets("log_message", "");
+                if (!prev_log_message.isBlank())
+                    log_message += "\n" + prev_log_message;
+            }
 
-            int ret = RunActionUtils.insertRunAction(run, action, extension, "Deletion Thread", log_message, lfns.size(),
-                    lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, null, "Done", limit);
+            String msg = run + "," + action + "," + extension + "," + sourcese + ","
+                    + log_message + "," + lfns.size() + "," + lfns.stream().mapToLong(lfn -> lfn.size).sum();
 
-            if (ret >= 0) {
+            long ret = RunActionUtils.insertRunAction(run, action, extension, requester, log_message, lfns.size(),
+                    lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, null, "Done", limit, responsible, id_record);
+
+            if (ret > 0) {
                 RunActionUtils.retrofitRawdataRunsLastAction(run);
-                updateFileCounters(run, lfns);
-                logger.log(Level.INFO, "Successful deletion of the " + run + " run");
+
+                if (action.equalsIgnoreCase("delete"))
+                    updateFileCounters(run, lfns);
+                logger.log(Level.INFO, "Successful deletion: " + msg);
             }
         } else {
             logger.log(Level.WARNING, "The deletion of the " + run + " run failed.");
+            if (id_record != null) {
+                String query = "update rawdata_runs_action set status = 'Error', log_message = E'deletion failed\n' || log_message"
+                        + " where id_record = " + id_record + ";";
+                db.query(query);
+            }
             deletionFailed.add(run);
         }
     }
 
-    public static void deleteRuns(Set<Long> runs, String extension, String storage, Integer limit) {
+    public static void deleteRuns(Set<Long> runs, String extension, String storage, Integer limit,
+                                  String requester, String responsible, Long id_record) {
         deletionFailed.clear();
         logger.log(Level.INFO, "List of runs that must be deleted: " + runs + ", nr: " + runs.size());
 
         for (Long run : runs) {
             Map<String, Long> seFiles = new HashMap<>();
             if (storage != null)
-                seFiles = RunInfoUtils.getReplicasForRun(run, null);
+                seFiles = RunInfoUtils.getReplicasForRun(run, "all");
 
             Set<LFN> lfnsToDelete = getLFNsForDeletion(run, extension, storage, limit);
-            if (!lfnsToDelete.isEmpty())
-                deleteRun(run, lfnsToDelete, extension, storage, limit, seFiles);
+            if (lfnsToDelete != null && !lfnsToDelete.isEmpty())
+                deleteRun(run, lfnsToDelete, extension, storage, limit, seFiles, requester, responsible, id_record);
         }
 
         if (!deletionFailed.isEmpty()) {
@@ -190,34 +227,108 @@ public class DeletionUtils {
         query = DBFunctions.composeUpsert("rawdata_runs", values, Set.of("run", "partition"));
         db.query(query);
     }
-    
-    public static void deleteRunsWithCertainRunQuality(Set<Long> runs, String runQuality, String extension, String storage, Integer limit) throws HandleException {
-        int daqGoodFlag = RunInfoUtils.getDaqGoodFlag(runQuality);
-        if (Arrays.asList(0, 1, 2).contains(daqGoodFlag)) {
-            Set<Long> updatedRuns = new HashSet<>();
-            Iterator<Long> runsIterator = runs.iterator();
-            while (runsIterator.hasNext()) {
-                Long run = runsIterator.next();
-                Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
-                if (!runInfos.isEmpty()) {
-                    RunInfo runInfo = runInfos.iterator().next();
-                    if (!runInfo.getRunQuality().equalsIgnoreCase(runQuality)) {
-                        logger.log(Level.WARNING, "The run quality for run " + run
-                                + "has been changed from " + runQuality + " to " + runInfo.getRunQuality());
-                        updatedRuns.add(run);
-                        runsIterator.remove();
-                    }
-                }
-            }
 
-            if (!updatedRuns.isEmpty()) {
-                logger.log(Level.WARNING, "Runs with different info in Logbook than database: " + updatedRuns + ", nr: " + updatedRuns.size());
-                RunInfoUtils.fetchRunInfo(updatedRuns);
-            }
+    public static boolean hasDuplicates(Long run, String action, String filter, String sourcese, Integer percentage) {
+        DB db = new DB();
+        boolean bFilter = filter.equalsIgnoreCase("ctf") ||
+                filter.equalsIgnoreCase("tf") || filter.equalsIgnoreCase("other");
 
-            //deleteRuns(runs, true, extension, storage, limit);
-        } else {
-            logger.log(Level.WARNING, "The received run quality " + runQuality + " is invalid.");
+        /*
+         * record already inserted: action = delete, filter = all
+         * possible duplicates:
+         *   action = delete replica, filter = {all/ctf/tf/other}
+         *   action = delete, filter = {ctf/tf/other}
+         */
+
+        String select = "select count(1) as cnt from rawdata_runs_action where run = " + run
+                + " and (status = 'Done' or status = 'In progress' or status = 'Queued' or status = 'Warning')"
+                + " and action = 'delete' and filter = 'all';";
+        db.query(select);
+        if (db.geti("cnt") > 0 &&
+                ((action.equalsIgnoreCase("delete") && bFilter) ||
+                        (action.equalsIgnoreCase("delete replica") &&
+                                (filter.equalsIgnoreCase("all") ||  bFilter)))) {
+            return true;
         }
+
+        /*
+         * record already inserted: action = delete, filter = ctf
+         * possible duplicates:
+         *   action = delete replica, filter = ctf
+         */
+
+        select = "select count(1) as cnt from rawdata_runs_action where run = " + run
+                + " and (status = 'Done' or status = 'In progress' or status = 'Queued' or status = 'Warning')"
+                + " and action = 'delete' and filter = 'ctf';";
+        db.query(select);
+        if (db.geti("cnt") > 0 && action.equalsIgnoreCase("delete replica") && filter.equalsIgnoreCase("ctf"))
+            return true;
+
+        /*
+         * record already inserted: action = delete, filter = tf
+         * possible duplicates:
+         *   action = delete replica, filter = tf
+         */
+
+        select = "select count(1) as cnt from rawdata_runs_action where run = " + run
+                + " and (status = 'Done' or status = 'In progress' or status = 'Queued' or status = 'Warning')"
+                + " and action = 'delete' and filter = 'tf';";
+        db.query(select);
+        if (db.geti("cnt") > 0 && action.equalsIgnoreCase("delete replica") && filter.equalsIgnoreCase("tf"))
+            return true;
+
+        /*
+         * record already inserted: action = delete, filter = other
+         * possible duplicates:
+         *   action = delete replica, filter = other
+         */
+
+        select = "select count(1) as cnt from rawdata_runs_action where run = " + run
+                + " and (status = 'Done' or status = 'In progress' or status = 'Queued' or status = 'Warning')"
+                + " and action = 'delete' and filter = 'other';";
+        db.query(select);
+        if (db.geti("cnt") > 0 && action.equalsIgnoreCase("delete replica") && filter.equalsIgnoreCase("other"))
+            return true;
+
+        /*
+         * record already inserted: action = delete replica, filter = all
+         * possible duplicates:
+         *   action = delete replica, filter = {ctf/tf/other}
+         */
+
+        select = "select count(1) as cnt, sourcese from rawdata_runs_action where run = " + run
+                + " and (status = 'Done' or status = 'In progress' or status = 'Queued' or status = 'Warning')"
+                + " and action = 'delete replica' and filter = 'all' group by sourcese;";
+        db.query(select);
+        if (db.geti("cnt") > 0 && action.equalsIgnoreCase("delete replica") && bFilter) {
+            while (db.moveNext()) {
+                String insertedSEs = db.gets("sourcese", "");
+                String currentSourcese = sourcese;
+                if (sourcese == null)
+                    currentSourcese = "";
+                if (insertedSEs.contains(currentSourcese) || currentSourcese.contains(insertedSEs) || insertedSEs.equalsIgnoreCase(currentSourcese))
+                    return true;
+            }
+        }
+
+        /*
+         * record already inserted that has same values for action, filter, sourcese, percentage
+         */
+        select = "select count(1) as cnt from rawdata_runs_action where run = " + run +
+                " and action = '" + action + "' and filter = '" + filter + "'";
+        if (sourcese == null)
+            select += " and sourcese is null";
+        else
+            select += " and sourcese = '" + sourcese + "'";
+
+        if (percentage == null)
+            select += " and percentage is null";
+        else
+            select += " and percentage = " + percentage;
+        db.query(select);
+        if (db.geti("cnt") > 0)
+            return true;
+
+        return false;
     }
 }

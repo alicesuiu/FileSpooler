@@ -182,7 +182,7 @@ public class RunActionUtils {
 
     public static void retrofitRawdataRunsLastAction(Long run) {
         String select = "select run, filter, action, sourcese, targetse, percentage from rawdata_runs_action where run = " +
-                run + " order by addtime;";
+                run + " and status = 'Done' order by addtime;";
         DB db = new DB(select);
         while (db.moveNext()) {
             String filter = db.gets("filter", "");
@@ -222,9 +222,10 @@ public class RunActionUtils {
         db.query(query + " on conflict (run) do nothing");
     }
 
-    public static int insertRunAction(Long run, String action, String filter, String source,
-                                      String log_message, Integer counter, Long size, String sourcese,
-                                      String targetse, String status, Integer percentage) {
+    public static long insertRunAction(Long run, String action, String filter, String source,
+                                       String log_message, Integer counter, Long size, String sourcese,
+                                       String targetse, String status, Integer percentage,
+                                       String responsible, Long id_record) {
         Map<String, Object> values = new HashMap<>();
         values.put("filter", filter);
         values.put("counter", counter);
@@ -237,34 +238,22 @@ public class RunActionUtils {
         values.put("targetse", targetse);
         values.put("status", status);
         values.put("percentage", percentage);
+        values.put("responsible", responsible);
 
         DB db = new DB();
-        String select = "select * from rawdata_runs_action where run = " + run + " and filter = '" + filter
-                + "' and (status = 'In progress' or status = 'Queued') and log_message = 'todo';";
-        db.query(select);
-        if (db.moveNext()) {
-            if (sourcese != null)
-                sourcese = "'" + sourcese + "'";
-            if (targetse != null)
-                targetse = "'" + targetse + "'";
-            String update = "update rawdata_runs_action set status = '" + status + "', log_message = '" + log_message
-                    + "', action = '" + action + "', counter = " + counter + ", size = " + size + ", sourcese = " + sourcese
-                    + ", targetse = " + targetse + ", percentage = " + percentage + " where run = " + run + " and filter = '"
-                    + filter + "' and status = 'In progress' and log_message = 'todo';";
-            logger.log(Level.INFO, update);
-            if (!db.syncUpdateQuery(update)) {
-                logger.log(Level.WARNING, "The update action for run " + run + " failed " + db.getLastError());
-                return -1;
-            }
-            return 0;
+        String query;
+        if (id_record != null) {
+            values.put("id_record", id_record);
+            query = DBFunctions.composeUpdate("rawdata_runs_action", values, Set.of("id_record")) + " returning id_record;";
+        } else {
+            query = DBFunctions.composeInsert("rawdata_runs_action", values) + " returning id_record;";
         }
 
-        String insert = DBFunctions.composeInsert("rawdata_runs_action", values);
-        logger.log(Level.INFO, insert);
-        if (!db.query(insert)) {
-            logger.log(Level.WARNING, "Insert in rawdata_runs_action failed for run: " + run + " " + db.getLastError());
+        logger.log(Level.INFO, query);
+        if (!db.query(query)) {
+            logger.log(Level.WARNING, "Query in rawdata_runs_action failed: " + query + " " + db.getLastError());
             return -1;
         }
-        return 0;
+        return db.getl("id_record", -1);
     }
 }

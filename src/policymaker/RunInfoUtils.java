@@ -12,6 +12,7 @@ import alien.se.SEUtils;
 import lazyj.Format;
 import lazyj.mail.Mail;
 import lazyj.mail.Sendmail;
+import lazyj.DBFunctions;
 import lia.Monitor.Store.Fast.DB;
 import lia.Monitor.monitor.AppConfig;
 import org.json.simple.JSONArray;
@@ -69,19 +70,25 @@ public class RunInfoUtils {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .GET()
-                    .uri(URI.create(URL_GET_RUN_INFO + encode(String.valueOf(runs))))
+                    .uri(URI.create(URL_GET_RUN_INFO + encode(String.valueOf(runs)) + "&token=" + LOGBOOOK_TOKEN_PROD))
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != HttpServletResponse.SC_OK) {
-                logger.log(Level.WARNING, "Response code for GET req for run " + runs + " is " + response.statusCode());
-                logger.log(Level.WARNING, "Response message for GET req for run " + runs + " is " + response.body());
+                logger.log(Level.WARNING, "[Bookkeeping] Response code for GET req for run " + runs + " is " + response.statusCode());
+                logger.log(Level.WARNING, "[Bookkeeping] Response message for GET req for run " + runs + " is " + response.body());
+                HandleException he = new HandleException("[Bookkeeping] Response message for GET req for run " + runs + " is " + response.body(), response.statusCode());
+                he.isTimeToSentMail();
                 return null;
             }
             body = response.body();
         } catch (Exception e) {
-            logger.log(Level.WARNING, "Communication error " + e);
+            logger.log(Level.WARNING, "[Bookkeeping] Communication error " + e);
+            HandleException he = new HandleException("[Bookkeeping] Communication error for request " + URL_GET_RUN_INFO + encode(String.valueOf(runs))
+                    + ", error message: " + e, -1);
+            he.isTimeToSentMail();
+            return null;
         }
         return body;
     }
@@ -99,8 +106,8 @@ public class RunInfoUtils {
                                 aliceL3Polarity = null, aliceDipolePolarity = null, beamType = null, lhcPeriod = null,
                                 ctfFileSize = null, tfFileSize = null, otherFileSize = null;
                         Long timeO2Start = null, timeO2End = null, runNumber = null, fillNumber = null,
-                                startOfDataTransfer = null, endOfDataTransfer = null;
-                        Double lhcBeamEnergy = null;
+                                startOfDataTransfer = null, endOfDataTransfer = null, runDuration = null;
+                        Double lhcBeamEnergy = null, aliceL3Current = null;
                         Integer ctfFileCount = null, tfFileCount = null, otherFileCount = null;
                         RunInfo runInfo = new RunInfo();
 
@@ -125,6 +132,11 @@ public class RunInfoUtils {
                             timeO2End = ((Number) block.get("endTime")).longValue();
                         runInfo.setTimeO2End(timeO2End);
 
+                        if (runInfo.getTimeO2End() != null && runInfo.getTimeO2End() > 0
+                                && runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0)
+                            runDuration = runInfo.getTimeO2End() - runInfo.getTimeO2Start();
+                        runInfo.setRunDuration(runDuration);
+
                         if (block.get("fillNumber") != null && block.get("fillNumber") instanceof Number)
                             fillNumber = ((Number) block.get("fillNumber")).longValue();
                         runInfo.setFillNumber(fillNumber);
@@ -144,6 +156,10 @@ public class RunInfoUtils {
                         if (block.get("aliceDipolePolarity") != null && block.get("aliceDipolePolarity") instanceof String)
                             aliceDipolePolarity = block.get("aliceDipolePolarity").toString();
                         runInfo.setAliceDipolePolarity(aliceDipolePolarity);
+
+                        if (block.get("aliceL3Current") != null && block.get("aliceL3Current") instanceof Number)
+                            aliceL3Current = ((Number) block.get("aliceL3Current")).doubleValue();
+                        runInfo.setAliceL3Current(aliceL3Current);
 
                         if (block.get("definition") != null && block.get("definition") instanceof String)
                             runType = block.get("definition").toString();
@@ -204,7 +220,9 @@ public class RunInfoUtils {
                 }
             }
         } catch (ParseException ex) {
-            logger.log(Level.WARNING, "Caught error while parsing the JSON response " + response + " " + ex);
+            logger.log(Level.WARNING, "[Bookkeeping] Caught error while parsing the JSON response " + response + " " + ex);
+            HandleException he = new HandleException("[Bookkeeping] Caught error while parsing the JSON response " + response + ", error message: " + ex, -1);
+            he.isTimeToSentMail();
         }
         return runInfoSet;
     }
@@ -240,7 +258,9 @@ public class RunInfoUtils {
                 }
             }
         } catch (ParseException ex) {
-            logger.log(Level.WARNING, "Caught error while parsing the JSON response " + response + " " + ex);
+            logger.log(Level.WARNING, "[Bookkeeping] Caught error while parsing the JSON response " + response + " " + ex);
+            HandleException he = new HandleException("[Bookkeeping] Caught error while parsing the JSON response " + response + ", error message: " + ex, -1);
+            he.isTimeToSentMail();
             return null;
         }
 
@@ -257,8 +277,12 @@ public class RunInfoUtils {
 
     public static int sendRunInfoToLogBook(Long run, Map<String, Object> fields) {
         try {
-            if (fields.isEmpty())
+            if (fields.isEmpty()) {
+                logger.log(Level.WARNING, "[Bookkeeping] Could not get the required parameters for run " +  run + " from DB to send them to Bookkeeping");
+                HandleException he = new HandleException("[Bookkeeping] Could not get the required parameters for run " +  run + " from DB to send them to Bookkeeping", -1);
+                he.isTimeToSentMail();
                 return -1;
+            }
 
             String json = Format.toJSON(fields).toString();
 
@@ -273,7 +297,7 @@ public class RunInfoUtils {
                     .build();
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(URL_PATCH_RUN_INFO + encode(String.valueOf(run))))
+                    .uri(URI.create(URL_PATCH_RUN_INFO + encode(String.valueOf(run)) + "&token=" + LOGBOOOK_TOKEN_PROD))
                     .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
                     .header("Content-Type", "application/json")
                     .build();
@@ -282,19 +306,24 @@ public class RunInfoUtils {
                     httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != HttpServletResponse.SC_OK) {
-                logger.log(Level.WARNING, "Response code for PATCH req for run " + run + " is " + response.statusCode());
-                logger.log(Level.WARNING, "Response message for PATCH req for run " + run + " is " + response.body());
+                logger.log(Level.WARNING, "[Bookkeeping] Response code for PATCH req for run " + run + " is " + response.statusCode());
+                logger.log(Level.WARNING, "[Bookkeeping] Response message for PATCH req for run " + run + " is " + response.body());
                 logger.log(Level.INFO, json);
+                HandleException he = new HandleException("[Bookkeeping] Response message for PATCH req for run " + run + " is " + response.body(), response.statusCode());
+                he.isTimeToSentMail();
             }
             return response.statusCode();
         } catch (IOException | InterruptedException | UnrecoverableKeyException | KeyManagementException | NoSuchProviderException |
                  NoSuchAlgorithmException | KeyStoreException e) {
-            logger.log(Level.WARNING,"Communication error " + e);
+            logger.log(Level.WARNING,"[Bookkeeping] Communication error " + e);
+            HandleException he = new HandleException("[Bookkeeping] Communication error for request " + URL_PATCH_RUN_INFO + encode(String.valueOf(run))
+                    + ", error message: " + e, -1);
+            he.isTimeToSentMail();
         }
         return -1;
     }
 
-    public static void fetchRunInfo(Set<Long> runs) throws HandleException {
+    public static void fetchRunInfo(Set<Long> runs) {
         List<Long> missingTimeO2End = new ArrayList<>();
         List<Long> missingLogbookRecord = new ArrayList<>();
         String msg;
@@ -310,6 +339,7 @@ public class RunInfoUtils {
                         missingLogbookRecord.add(run);
                         continue;
                     }
+
                     if (runInfo.getTimeO2End() != null && runInfo.getTimeO2End() > 0) {
                         if (runInfo.getTimeO2Start() != null && runInfo.getTimeO2Start() > 0)
                             runInfo.setRunDuration(runInfo.getTimeO2End() - runInfo.getTimeO2Start());
@@ -321,19 +351,28 @@ public class RunInfoUtils {
                 } else {
                     missingLogbookRecord.add(run);
                 }
-            } else {
-                throw new HandleException("The PATCH request to the logbook did not work for run " + run + ". We caught HTTP error code.", status);
             }
         }
 
         if (!missingTimeO2End.isEmpty()) {
             msg = "Runs with missing timestamp information: " + missingTimeO2End + ", nr: " + missingTimeO2End.size();
-            throw new HandleException(msg, missingTimeO2End);
+            HandleException he = new HandleException("[Bookkeeping] " + msg, -1);
+            he.isTimeToSentMail();
         }
+
         if (!missingLogbookRecord.isEmpty()) {
             msg = "Runs with missing logbook records: " + missingLogbookRecord + ", nr: " + missingLogbookRecord.size();
-            throw new HandleException(msg, missingLogbookRecord);
+            HandleException he = new HandleException("[Bookkeeping] " + msg, -1);
+            he.isTimeToSentMail();
         }
+    }
+
+    public static RunInfo getRunInfo(String run) {
+        Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(run);
+        RunInfo runInfo = null;
+        if (!runInfos.isEmpty())
+            runInfo = runInfos.iterator().next();
+        return runInfo;
     }
 
     private static Map<String, Object> getRunParamsForLogBook(String run) {
@@ -458,23 +497,30 @@ public class RunInfoUtils {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != HttpServletResponse.SC_OK) {
-                logger.log(Level.WARNING, "Response code for GET changes req for mintime " + mintime + " and maxtime "
+                logger.log(Level.WARNING, "[Bookkeeping] Response code for GET changes req for mintime " + mintime + " and maxtime "
                         + maxtime + ": " + response.statusCode());
-                logger.log(Level.WARNING, "Response message for GET changes req for mintime " + mintime + " and maxtime "
+                logger.log(Level.WARNING, "[Bookkeeping] Response message for GET changes req for mintime " + mintime + " and maxtime "
                         + maxtime + ": " + response.body());
+                HandleException he = new HandleException("[Bookkeeping] Response message for GET changes req for mintime " + mintime + " and maxtime "
+                        + maxtime + ": " + response.body(), response.statusCode());
+                he.isTimeToSentMail();
                 return null;
             }
 
             runInfoSet = parseRunInfoLogsJSON(response.body());
         } catch (Exception e) {
-            logger.log(Level.WARNING, "Communication error " + e);
-            //return null;
+            logger.log(Level.WARNING, "[Bookkeeping] Communication error for request " + URL_GET_CHANGES_RUN_INFO
+                    + "&filter[created][from]=" + encode(String.valueOf(mintime)) + ", error message: " + e);
+            HandleException he = new HandleException("[Bookkeeping] Communication error for request " + URL_GET_CHANGES_RUN_INFO
+                    + "&filter[created][from]=" + encode(String.valueOf(mintime)) + ", error message: " + e, -1);
+            he.isTimeToSentMail();
+            return null;
         }
 
         return runInfoSet;
     }
 
-    public static Set<Long> getLastUpdatedRuns(long mintime, long maxtime) throws HandleException {
+    public static Set<Long> getLastUpdatedRuns(long mintime, long maxtime) {
         Set<RunInfo> runInfoSet = RunInfoUtils.getRunInfoChangesFromLogBook(mintime, maxtime);
         Set<Long> runs = new HashSet<>();
         if (runInfoSet != null) {
@@ -489,8 +535,6 @@ public class RunInfoUtils {
                         runs.add(ri.getRunNumber());
                 }
             }
-        } else {
-            throw new HandleException("Get last updated runs between: [" + mintime + ", " + maxtime + "] failed.");
         }
         return runs;
     }
@@ -580,6 +624,7 @@ public class RunInfoUtils {
                 lfnsIterator.remove();
             }
         }
+
         logger.log(Level.INFO, "Lfns list size after get from collection: " + lfns.size());
         return lfns;
     }
@@ -601,6 +646,7 @@ public class RunInfoUtils {
             }
             lfnsToProcess.addAll(lfns);
         }
+
         logger.log(Level.INFO, "Lfns list size after get from collection: " + lfnsToProcess.size());
         return lfnsToProcess;
     }
@@ -617,43 +663,51 @@ public class RunInfoUtils {
             select += " and lfn not like '%/o2_ctf_%.root' and lfn not like '%/o2_rawtf_%.tf'";
         select += ";";
 
-        Set<LFN> lfns = new HashSet<>();
+        Collection<String> fileNames = new ArrayList<>();
         db.query(select);
-        while (db.moveNext()) {
-            LFN lfn = LFNUtils.getLFN(db.gets("lfn"));
-            if (lfn != null && lfn.isFile())
-                lfns.add(lfn);
+        while (db.moveNext())
+            fileNames.add(db.gets("lfn"));
+        List<LFN> lfns = LFNUtils.getLFNs(true, fileNames);
+        if (lfns != null && !lfns.isEmpty()) {
+            logger.log(Level.INFO, "Lfns list size after get from rawdata details: " + lfns.size());
+            return new HashSet<>(lfns);
         }
-        logger.log(Level.INFO, "Lfns list size after get from rawdata details: " + lfns.size());
-        return lfns;
+        return new HashSet<>();
     }
 
     public static Set<LFN> getLFNsFromRawdata(String startingDir) {
         DB db = new DB();
         String select = "select lfn from rawdata where lfn like '" + startingDir + "%';";
-        Set<LFN> lfns = new HashSet<>();
+        Collection<String> fileNames = new ArrayList<>();
         db.query(select);
-        while (db.moveNext()) {
-            LFN lfn = LFNUtils.getLFN(db.gets("lfn"));
-            if (lfn != null && lfn.isFile())
-                lfns.add(lfn);
+        while (db.moveNext())
+            fileNames.add(db.gets("lfn"));
+        List<LFN> lfns = LFNUtils.getLFNs(true, fileNames);
+        if (lfns != null && !lfns.isEmpty()) {
+            logger.log(Level.INFO, "Lfns list size after get from rawdata: " + lfns.size());
+            return new HashSet<>(lfns);
         }
-        logger.log(Level.INFO, "Lfns list size after get from rawdata: " + lfns.size());
-        return lfns;
+        return new HashSet<>();
     }
 
     public static void getLfnsFromCertainStorage(Set<LFN> lfns, String storage) {
         SE se = SEUtils.getSE(storage);
 
-        Iterator<LFN> lfnsIterator = lfns.iterator();
-        while (lfnsIterator.hasNext()) {
-            LFN lfn = lfnsIterator.next();
-            GUID g = GUIDUtils.getGUID(lfn);
-            if (!g.hasReplica(se))
-                lfnsIterator.remove();
+        Map<UUID, LFN> uuids = new HashMap<>(lfns.size());
+        for (LFN l : lfns)
+            uuids.put(l.guid, l);
+        Set<GUID> guids = GUIDUtils.getGUIDs(uuids.keySet().toArray(new UUID[0]));
+
+        for (GUID g : guids) {
+            if (!g.hasReplica(se)) {
+                LFN lfn = uuids.get(g.guid);
+                if (lfn != null)
+                    lfns.remove(lfn);
+            }
         }
 
-        logger.log(Level.INFO, "Lfns list size after get from storage: " + lfns.size());
+        if (lfns != null && !lfns.isEmpty())
+            logger.log(Level.INFO, "Lfns list size after get from storage: " + lfns.size());
     }
 
     public static Set<LFN> getFirstXLfns(Set<LFN> lfns, Integer limit) {
@@ -718,13 +772,20 @@ public class RunInfoUtils {
 
     public static Map<String, Long> getReplicasForLFNs(Set<LFN> lfns) {
         Map<String, Long> seFiles = new HashMap<>();
-        for (LFN l : lfns) {
-            GUID g = GUIDUtils.getGUID(l);
-            Set<PFN> pfns = g.getPFNs();
-            for (PFN pfn : pfns) {
-                String seName = pfn.getSE().seName;
-                Long cnt = seFiles.computeIfAbsent(seName, (k) -> 0L) + 1;
-                seFiles.put(seName, cnt);
+
+        if (!lfns.isEmpty()) {
+            Collection<UUID> uuids = new ArrayList<>(lfns.size());
+            for (LFN l : lfns)
+                uuids.add(l.guid);
+            Set<GUID> guids = GUIDUtils.getGUIDs(uuids.toArray(new UUID[0]));
+
+            for (GUID g : guids) {
+                Set<PFN> pfns = g.getPFNs();
+                for (PFN pfn : pfns) {
+                    String seName = pfn.getSE().seName;
+                    Long cnt = seFiles.computeIfAbsent(seName, (k) -> 0L) + 1;
+                    seFiles.put(seName, cnt);
+                }
             }
         }
         return seFiles;
@@ -748,8 +809,138 @@ public class RunInfoUtils {
             replicasStr += " " + entry.getKey() + " : " + entry.getValue();
         }
 
-        logger.log(Level.INFO, "Replicas for run " + run + " " + replicasStr);
+        if (!replicas.isEmpty())
+            logger.log(Level.INFO, "Replicas for run " + run + " " + replicasStr);
         return replicas;
+    }
+
+    public static void updateReplicasForRun(Long run) {
+        String ctf = String.join(" ", RunInfoUtils.getReplicasForRun(run, "ctf").keySet()).stripLeading().stripTrailing();
+        String tf = String.join(" ", RunInfoUtils.getReplicasForRun(run, "tf").keySet()).stripLeading().stripTrailing();
+        String other = String.join(" ", RunInfoUtils.getReplicasForRun(run, "other").keySet()).stripLeading().stripTrailing();
+        DB db = new DB();
+
+        if (ctf.isEmpty())
+            ctf = null;
+        if (tf.isEmpty())
+            tf = null;
+        if (other.isEmpty())
+            other = null;
+
+        Map<String, Object> values = new HashMap<>();
+        values.put("ctf", ctf);
+        values.put("tf", tf);
+        values.put("other", other);
+        values.put("run", run);
+
+        String query = DBFunctions.composeUpsert("rawdata_runs_last_action", values, Set.of("run"));
+        logger.log(Level.INFO, query);
+        db.query(query);
+    }
+
+    public static Map<String, List<String>> getSEs() {
+        Map<String, List<String>> seMap = new HashMap<>();
+        seMap.put("t0", new ArrayList<>());
+        seMap.put("t1", new ArrayList<>());
+        seMap.put("disk", new ArrayList<>());
+        seMap.put("tape", new ArrayList<>());
+        for (SE se : SEUtils.getSEs(null)) {
+            String name = se.getName();
+            boolean t0, t1;
+
+            t0 = name.startsWith("ALICE::CERN");
+            t1 = name.startsWith("ALICE::FZK") || name.startsWith("ALICE::CNAF")
+                    || name.startsWith("ALICE::CCIN2P3") || name.startsWith("ALICE::KISTI_GSDC")
+                    || name.startsWith("ALICE::NDGF") || name.startsWith("ALICE::RAL")
+                    || name.startsWith("ALICE::SARA") || name.startsWith("ALICE::RRC_KI_T1");
+
+            if (t0)
+                seMap.get("t0").add(name);
+            else if (t1)
+                seMap.get("t1").add(name);
+
+            if (se.isQosType("disk") || se.isQosType("special"))
+                seMap.get("disk").add(name);
+            else if (se.isQosType("tape"))
+                seMap.get("tape").add(name);
+        }
+        return seMap;
+    }
+
+    public static Set<String> getTier1SE() {
+        Set<String> se = new HashSet<>();
+        se.add("ALICE::CCIN2P3::SE");
+        se.add("ALICE::CNAF::CEPH");
+        se.add("ALICE::CNAF::SE");
+        se.add("ALICE::FZK::SE");
+        se.add("ALICE::KISTI_GSDC::EOS");
+        se.add("ALICE::KISTI_GSDC::SE2");
+        se.add("ALICE::NDGF::DCACHE");
+        se.add("ALICE::NDGF::DCACHE_TEST");
+        se.add("ALICE::RAL::CEPH");
+        se.add("ALICE::RAL::CEPH_Test");
+        se.add("ALICE::RRC_KI_T1::EOS");
+        se.add("ALICE::SARA::DCACHE");
+        se.add("ALICE::CCIN2P3::TAPE");
+        se.add("ALICE::CNAF::TAPE");
+        se.add("ALICE::FZK::TAPE");
+        se.add("ALICE::KISTI_GSDC::CDS");
+        se.add("ALICE::NDGF::DCACHE_TAPE");
+        se.add("ALICE::RAL::CTA");
+        se.add("ALICE::RAL::CTA_TEST");
+        se.add("ALICE::RAL::Tape");
+        se.add("ALICE::RRC_KI_T1::DCACHE_TAPE");
+        se.add("ALICE::SARA::DCACHE_TAPE");
+        return se;
+    }
+
+    public static Set<String> getTier0SE() {
+        Set<String> se = new HashSet<>();
+        se.add("ALICE::CERN::EOS");
+        se.add("ALICE::CERN::EOSALICEO2");
+        se.add("ALICE::CERN::EOSP2");
+        se.add("ALICE::CERN::OCDB");
+        se.add("ALICE::CERN::CTA");
+        se.add("ALICE::CERN::CTA_TEST");
+        return se;
+    }
+
+    public static Set<String> getDiskSE() {
+        Set<String> se = new HashSet<>();
+        se.add("ALICE::CCIN2P3::SE");
+        se.add("ALICE::CNAF::CEPH");
+        se.add("ALICE::CNAF::SE");
+        se.add("ALICE::FZK::SE");
+        se.add("ALICE::KISTI_GSDC::EOS");
+        se.add("ALICE::KISTI_GSDC::SE2");
+        se.add("ALICE::NDGF::DCACHE");
+        se.add("ALICE::NDGF::DCACHE_TEST");
+        se.add("ALICE::RAL::CEPH");
+        se.add("ALICE::RAL::CEPH_Test");
+        se.add("ALICE::RRC_KI_T1::EOS");
+        se.add("ALICE::SARA::DCACHE");
+        se.add("ALICE::CERN::EOS");
+        se.add("ALICE::CERN::EOSALICEO2");
+        se.add("ALICE::CERN::EOSP2");
+        se.add("ALICE::CERN::OCDB");
+        return se;
+    }
+
+    public static Set<String> getTapeSE() {
+        Set<String> se = new HashSet<>();
+        se.add("ALICE::CCIN2P3::TAPE");
+        se.add("ALICE::CNAF::TAPE");
+        se.add("ALICE::FZK::TAPE");
+        se.add("ALICE::KISTI_GSDC::CDS");
+        se.add("ALICE::NDGF::DCACHE_TAPE");
+        se.add("ALICE::RAL::CTA");
+        se.add("ALICE::RAL::CTA_TEST");
+        se.add("ALICE::RAL::Tape");
+        se.add("ALICE::RRC_KI_T1::DCACHE_TAPE");
+        se.add("ALICE::SARA::DCACHE_TAPE");
+        se.add("ALICE::CERN::CTA");
+        se.add("ALICE::CERN::CTA_TEST");
+        return se;
     }
 
     private static void printLfns(Set<LFN> lfns, String output) {

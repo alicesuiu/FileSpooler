@@ -43,15 +43,15 @@ public class DeletionThread extends Thread {
             Iterator<Long> it = runs.iterator();
             while (it.hasNext()) {
                 Long run = it.next();
-                Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, null, "ALICE::CERN::EOSALICEO2", null);
-                if (lfns.isEmpty()) {
+                Set<LFN> lfns = DeletionUtils.getLFNsForDeletion(run, "all", "ALICE::CERN::EOSALICEO2", null);
+                if (lfns == null || lfns.isEmpty()) {
                     it.remove();
                     continue;
                 }
 
                 RunActionUtils.insertRunAction(run, "delete replica", "all", "Deletion Thread",
                         "todo", lfns.size(), lfns.stream().mapToLong(lfn -> lfn.size).sum(),
-                        "ALICE::CERN::EOSALICEO2", null, "Queued", null);
+                        "ALICE::CERN::EOSALICEO2", null, "Queued", null, "todo", null);
 
             }
 

@@ -1,17 +1,15 @@
 package policymaker;
 
-import java.util.List;
-
 public class HandleException extends Exception {
-    private List<Long> list;
     private Integer errorCode;
+    private static long lastMailSent = 0;
+    private static Integer prevErrorCode = 0;
+    private static String prevErrorMessage = "";
+
+    private static final long EXECUTION_INTERVAL = 1000L * 60 * 60; // 1 hour
+
     public HandleException(String message) {
         super(message);
-    }
-
-    public HandleException(String message, List<Long> list) {
-        super(message);
-        this.list = list;
     }
 
     public HandleException(String message, Integer errorCode) {
@@ -19,12 +17,19 @@ public class HandleException extends Exception {
         this.errorCode = errorCode;
     }
 
-    public List<Long> getList() {
-        return list;
-    }
-
     public Integer getErrorCode() {
         return errorCode;
+    }
+
+    public void isTimeToSentMail() {
+        if (!getMessage().equalsIgnoreCase(prevErrorMessage) && errorCode != prevErrorCode ||
+                (System.currentTimeMillis() - lastMailSent) >= EXECUTION_INTERVAL) {
+            sendMail();
+            lastMailSent = System.currentTimeMillis();
+            prevErrorCode = errorCode;
+            prevErrorMessage = getMessage();
+        }
+
     }
 
     public void sendMail() {
@@ -37,11 +42,9 @@ public class HandleException extends Exception {
         sBody += "The PATCH or GET request to the bookkeeping did not work. We got the following error message:\n";
         sBody += getMessage() + "\n";
 
-        if (errorCode != null && errorCode > 0)
+        if (errorCode != null)
             sBody += "Also, we received the following error code: " + errorCode + "\n";
 
-        if (list != null)
-            sBody += "Also, we received the following list of runs: " + list + "\n";
 
         sBody += "\nBest regards,\nRunInfoThread.\n";
         sSubject = "Warning: The PATCH/GET request to bookkeeping failed";

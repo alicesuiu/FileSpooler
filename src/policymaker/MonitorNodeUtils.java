@@ -62,6 +62,7 @@ public class MonitorNodeUtils {
             HttpRequest request = HttpRequest.newBuilder()
                     .GET()
                     .uri(URI.create(GET_ACTIVE_NODES))
+                    .timeout(Duration.ofSeconds(5))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 

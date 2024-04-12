@@ -5,7 +5,6 @@ import alien.config.ConfigUtils;
 import alien.managers.TransferManager;
 import alien.se.SEUtils;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -39,13 +38,13 @@ public class MoveUtils {
                 log_message =  "copy to " + targetSE;
             }
 
-             /*logger.log(Level.INFO, "Insert for run " + run + ": " + action + ", " + filter + ", " + log_message + ", "
+             /*logger.log(Level.INFO, "Insert for run " + run + ": " + action + ", " + extension + ", " + log_message + ", "
                 + lfns.size() + ", " + lfns.stream().mapToLong(lfn -> lfn.size).sum() + ", " + sourcese + ", " + targetSE);*/
 
-            int ret = RunActionUtils.insertRunAction(run, action, extension, "Move Thread", log_message, lfns.size(),
-                    lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, targetSE, "Done", limit);
+            long ret = RunActionUtils.insertRunAction(run, action, extension, "Move Thread", log_message, lfns.size(),
+                    lfns.stream().mapToLong(lfn -> lfn.size).sum(), sourcese, targetSE, "Done", limit, "Move Thread", null);
 
-            if (ret >= 0) {
+            if (ret > 0) {
                 TransferManager.addToTransfer(transferId, lfns);
                 RunActionUtils.retrofitRawdataRunsLastAction(run);
                 logger.log(Level.INFO, "The " + run + " run was successfully " + action + " to " + targetSE);

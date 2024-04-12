@@ -34,18 +34,14 @@
     private static boolean checkRunForQuality(Long run, String runQuality) {
         Set<RunInfo> runInfos = RunInfoUtils.getRunInfoFromLogBook(String.valueOf(run));
         boolean isOk = false;
-        try {
-            if (!runInfos.isEmpty()) {
-                RunInfo runInfo = runInfos.iterator().next();
-                if (!runInfo.getRunQuality().equalsIgnoreCase(runQuality)) {
-                    logMessage("The run quality for run " + run
-                            + "has been changed from " + runQuality + " to " + runInfo.getRunQuality());
-                    RunInfoUtils.fetchRunInfo(new HashSet<>(Arrays.asList(run)));
-                } else
-                    isOk = true;
-            }
-        } catch (HandleException he) {
-            //he.sendMail();
+        if (!runInfos.isEmpty()) {
+            RunInfo runInfo = runInfos.iterator().next();
+            if (!runInfo.getRunQuality().equalsIgnoreCase(runQuality)) {
+                logMessage("The run quality for run " + run
+                        + "has been changed from " + runQuality + " to " + runInfo.getRunQuality());
+                RunInfoUtils.fetchRunInfo(new HashSet<>(Arrays.asList(run)));
+            } else
+                isOk = true;
         }
         return isOk;
     }
@@ -69,16 +65,17 @@
 <%
     lia.web.servlets.web.Utils.logRequest("START /admin/deletion/delete.jsp", 0, request);
     boolean bAuthOK = false;
+    String user = null;
     session.setAttribute("user_authenticated", "true");
     if (request.isSecure()) {
         X509Certificate cert[] = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
         if (cert != null && cert.length > 0) {
             AlicePrincipal principal = new AlicePrincipal(cert[0].getSubjectDN().getName());
-            String sName = principal.getName();
-            if (sName != null && sName.length() > 0) {
-                Set<String> sRoles = LDAPHelper.checkLdapInformation("users="+sName, "ou=Roles,", "uid");
+            user = principal.getName();
+            if (user != null && user.length() > 0) {
+                Set<String> sRoles = LDAPHelper.checkLdapInformation("users="+user, "ou=Roles,", "uid");
                 bAuthOK = sRoles.contains("rawdatamgr");
-                session.setAttribute("user_account", sName);
+                session.setAttribute("user_account", user);
             }
         }
     }
@@ -86,52 +83,60 @@
     if (!bAuthOK)
         return;
 
-    final Set<Long> runsToDelete = new LinkedHashSet<>();
+    final Set<Long> idsToDelete = new LinkedHashSet<>();
     final RequestWrapper rw = new RequestWrapper(request);
-    final String sRuns = rw.gets("runs");
+    final String sIds = rw.gets("ids");
 
-    String q = IntervalQuery.numberInterval(sRuns, "run");
-    String[] rSplit = q.split("run=");
+    String q = IntervalQuery.numberInterval(sIds, "id");
+    String[] rSplit = q.split("id=");
     for (int i = 0; i < rSplit.length; i++) {
         if (rSplit[i].length() > 0) {
             String[] orSplit = rSplit[i].split("OR");
             if (orSplit.length > 0)
-                runsToDelete.add(Long.parseLong(orSplit[0].stripLeading().stripTrailing()));
+                idsToDelete.add(Long.parseLong(orSplit[0].stripLeading().stripTrailing()));
             else
-                runsToDelete.add(Long.parseLong(rSplit[i].stripLeading().stripTrailing()));
+                idsToDelete.add(Long.parseLong(rSplit[i].stripLeading().stripTrailing()));
         }
     }
-
-    out.println("Runs for deletion: " + sRuns + "<br><br>");
 
     final DB db = new DB();
-    for (Long run : runsToDelete) {
-        String select = "select * from rawdata_runs_action where status = 'Queued' and run = " + run + ";";
+    for (Long id : idsToDelete) {
+        String select = "select * from rawdata_runs_action where (status = 'Queued' or status = 'Warning') and id_record = " + id + ";";
         if (db.query(select)) {
             String source = db.gets("source");
-            if (source.equals("Deletion Thread")) {
-                // check if run quality is still test and lastmodified >= one month;
-                if (!checkRunForQuality(run, "Test"))
-                    continue;
-                if (!checkRunForLastModified(run))
-                    continue;
-            }
-
+            Long run = db.getl("run");
+            String action = db.gets("action");
             String filter = db.gets("filter");
-            String storage = db.gets("sourcese");
+            String log_message = db.gets("log_message");
+            Integer counter = db.geti("counter");
+            Long size = db.getl("size");
+            String sourcese = db.gets("sourcese", null);
+            String targetse = db.gets("targetse", null);
             Integer percentage = db.geti("percentage", 0);
 
-            String update = "update rawdata_runs_action set status = 'In progress' where run = " + run + " and status = 'Queued';";
-            if (!db.syncUpdateQuery(update)) {
-                logMessage("The update action for run " + run + " failed");
-                return;
-            }
-            logMessage("Update raw for run : " + run + " in rawdata_runs_action");
+            if (percentage == 0 || percentage == 100)
+                percentage = null;
 
-            DeletionUtils.deleteRuns(new HashSet<>(Arrays.asList(run)), null, filter, storage, percentage);
-            out.println("Run " + run + "was successfully deleted!<br>");
+            if (source.equals("Deletion Thread")) {
+                // check if run quality is still test and lastmodified >= one month;
+                String query = "delete from rawdata_runs_action where id_record = " + id + ";";
+                if (!checkRunForQuality(run, "Test") || !checkRunForLastModified(run)) {
+                    db.query(query);
+                    continue;
+                }
+            }
+
+            Long id_record = RunActionUtils.insertRunAction(run, action, filter, source, log_message, counter, size,
+                    sourcese, targetse, "In progress", percentage, user, id);
+
+            if (id_record > 0)
+                DeletionUtils.delTask(id_record, "rawdata_runs_action");
         }
     }
 
-    lia.web.servlets.web.Utils.logRequest("/admin/deletion/delete.jsp?runs="+sRuns, 1, request);
+    lia.web.servlets.web.Utils.logRequest("/admin/deletion/delete.jsp?ids="+sIds, 1, request);
 %>
+
+<script type="text/javascript">
+    window.history.back();
+</script>
