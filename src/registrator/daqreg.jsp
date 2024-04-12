@@ -57,8 +57,11 @@
 		String clientAddr = request.getRemoteAddr();
 
 		if (
-				!clientAddr.startsWith("10.162.36.") &&        // EPN IB interfaces
-						!clientAddr.equals("128.141.19.252")        // alihlt-gw-prod.cern.ch
+				!clientAddr.startsWith("10.162.36.") &&        // EPN eth interfaces
+						!clientAddr.startsWith("10.162.38.") &&        // New EPN eth interfaces
+						!clientAddr.startsWith("10.162.4.") &&        // EPN IB interfaces
+						!clientAddr.startsWith("10.162.5.") &&        // New EPN IB interfaces
+						!clientAddr.equals("128.141.19.252")       // alihlt-gw-prod.cern.ch
 		) {
 			lia.web.servlets.web.Utils.logRequest("/epn2eos/daqreg.jsp?DENIED=" + clientAddr, 0, request);
 			logMessage("Client not authorized: " + clientAddr);
@@ -91,10 +94,7 @@
 				|| curl.length() == 0 || seName.length() == 0
 				|| seioDaemons.length() == 0 || TFOrbits.length() == 0
 				|| persistent.length() == 0 || type.length() == 0) {
-			logMessage("Wrong parameters:\nsize: "+size+"\nsurl: "+surl+"\nmd5: "+md5+"\n" +
-					"period: "+period+"\ncurl: "+curl+"\nseName: "+seName+"\n" +
-					"seioDaemons: "+seioDaemons+"\nTFOrbits.length(): "+TFOrbits.length()+"\n" +
-					"persistent: "+persistent+"\ntype: "+type);
+			logMessage("Wrong parameters:\nsize: "+size+"\nsurl: "+surl+"\nmd5: "+md5+"\nperiod: "+period+"\ncurl: "+curl+"\nseName: "+seName+"\nseioDaemons: "+seioDaemons+"\nTFOrbits.length(): "+TFOrbits.length()+"\npersistent: "+persistent+"\ntype: "+type);
 			response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Wrong parameters");
 			code = HttpServletResponse.SC_BAD_REQUEST;
 			return;
@@ -128,7 +128,7 @@
 		int idx = curl.indexOf(period);
 
 		if (idx > 0) {
-			final String sPartitionDir = curl.substring(0, idx + period.length());
+			final String sPartitionDir = curl.substring(0, idx+period.length());
 			//final String sPartitionDir = curl.substring(0, idx);
 
 			if (mkDirsHistory.get(sPartitionDir) == null) {
@@ -140,7 +140,10 @@
 						return;
 					}
 
-					final CommandOutput co = alien.pool.AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
+					//final CommandOutput co = alien.pool.AliEnPool.executeCommand("admin", "moveDirectory " + sPartitionDir, true);
+
+					final String co = alien.catalogue.LFNUtils.moveDirectory(alien.user.UserFactory.getByUsername("admin"), sPartitionDir);
+
 					alien.catalogue.CatalogueUtils.invalidateIndexTableCache();
 					logMessage("daqreg.jsp :  moveDirectory (" + sPartitionDir + "):\n" + co);
 				}
